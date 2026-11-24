@@ -1,13 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import { Icon } from './ui.jsx'
 import { profile } from '../data/profile.js'
-
-const SECTIONS = [
-  { id: 'about', label: '소개' },
-  { id: 'research', label: '연구' },
-  { id: 'projects', label: '프로젝트' },
-]
 
 function useTheme() {
   const [theme, setTheme] = useState(() => {
@@ -33,19 +27,13 @@ function useTheme() {
 
 export default function Header() {
   const [isDark, toggle] = useTheme()
-  const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
-  const { pathname } = useLocation()
-  const inJournal = pathname.startsWith('/journal')
-
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 4)
     on()
     window.addEventListener('scroll', on, { passive: true })
     return () => window.removeEventListener('scroll', on)
   }, [])
-
-  useEffect(() => setOpen(false), [pathname])
 
   return (
     <header className={`header ${scrolled ? 'is-scrolled' : ''}`}>
@@ -54,28 +42,26 @@ export default function Header() {
           <span className="logo-mark">
             <Icon name="wave" size={16} />
           </span>
-          {profile.name}
+          <span className="logo-text">{profile.name}</span>
         </Link>
-        <nav className={`nav ${open ? 'is-open' : ''}`} aria-label="주요 메뉴">
-          {SECTIONS.map((s) => (
-            <Link key={s.id} to={{ pathname: '/', hash: `#${s.id}` }} onClick={() => setOpen(false)}>
-              {s.label}
-            </Link>
-          ))}
-          <Link to="/journal" className={inJournal ? 'is-active' : ''} onClick={() => setOpen(false)}>
-            연구 일지
-          </Link>
+        <nav className="nav" aria-label="주요 메뉴">
+          <NavLink to="/" end>
+            <Icon name="home" size={18} />
+            <span>홈</span>
+          </NavLink>
+          <NavLink to="/journal">
+            <Icon name="book" size={18} />
+            <span>연구 일지</span>
+          </NavLink>
         </nav>
         <div className="header-actions">
           <button className="icon-btn" onClick={toggle} aria-label="테마 전환">
-            <Icon name={isDark ? 'sun' : 'moon'} />
+            <Icon name={isDark ? 'sun' : 'moon'} size={20} />
           </button>
-          <a className="btn btn-sm btn-primary header-cta" href={profile.github} target="_blank" rel="noreferrer">
-            GitHub
-          </a>
-          <button className="icon-btn menu-btn" onClick={() => setOpen((v) => !v)} aria-label="메뉴 열기">
-            <Icon name={open ? 'close' : 'menu'} />
-          </button>
+          <Link className="btn btn-sm btn-primary" to="/write">
+            <Icon name="pen" size={16} />
+            <span className="hide-sm">글쓰기</span>
+          </Link>
         </div>
       </div>
     </header>

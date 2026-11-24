@@ -1,59 +1,54 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, useLocation } from 'react-router-dom'
 import Header from './components/Header.jsx'
-import Home from './pages/Home.jsx'
-import Journal from './pages/Journal.jsx'
+import { ToastHost } from './components/ui.jsx'
+import Dashboard from './pages/Dashboard.jsx'
+import JournalList from './pages/JournalList.jsx'
+import JournalPost from './pages/JournalPost.jsx'
 import NotFound from './pages/NotFound.jsx'
 import { profile } from './data/profile.js'
 
-// 글 상세 페이지는 수식(KaTeX)·마크다운 렌더러가 무거워 필요할 때만 불러옵니다.
-const JournalPost = lazy(() => import('./pages/JournalPost.jsx'))
+// 에디터(TipTap)는 무거우므로 글쓰기 화면에 들어갈 때만 불러옵니다.
+const Write = lazy(() => import('./pages/Write.jsx'))
 
-function ScrollManager() {
-  const { pathname, hash, key } = useLocation()
+function ScrollToTop() {
+  const { pathname } = useLocation()
   useEffect(() => {
-    if (!hash) {
-      window.scrollTo({ top: 0, behavior: 'instant' })
-      return
-    }
-    const id = decodeURIComponent(hash.slice(1))
-    let tries = 0
-    let raf
-    const tick = () => {
-      const el = document.getElementById(id)
-      if (el) el.scrollIntoView()
-      else if (tries++ < 30) raf = requestAnimationFrame(tick)
-    }
-    tick()
-    return () => cancelAnimationFrame(raf)
-  }, [pathname, hash, key])
+    window.scrollTo({ top: 0, behavior: 'instant' })
+  }, [pathname])
   return null
 }
 
 export default function App() {
+  const location = useLocation()
+  const isWrite = location.pathname.startsWith('/write')
   return (
     <>
-      <ScrollManager />
+      <ScrollToTop />
       <Header />
       <main>
-        <Suspense fallback={<div className="page" />}>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/journal" element={<Journal />} />
-            <Route path="/journal/:slug" element={<JournalPost />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </Suspense>
-      </main>
-      <footer className="footer">
-        <div className="container footer-inner">
-          <strong>{profile.name}</strong>
-          <span>Computational Electromagnetics · Research & Portfolio</span>
-          <span className="copy">
-            © {new Date().getFullYear()} {profile.name}. Built with Vite + React.
-          </span>
+        <div key={location.pathname} className="route-fade">
+          <Suspense fallback={<div className="page" />}>
+            <Routes location={location}>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/journal" element={<JournalList />} />
+              <Route path="/journal/:id" element={<JournalPost />} />
+              <Route path="/write" element={<Write />} />
+              <Route path="/write/:id" element={<Write />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
         </div>
-      </footer>
+      </main>
+      {!isWrite && (
+        <footer className="footer">
+          <div className="container footer-inner">
+            <strong>{profile.name}</strong>
+            <span>© {new Date().getFullYear()} · Built with Vite + React</span>
+          </div>
+        </footer>
+      )}
+      <ToastHost />
     </>
   )
 }

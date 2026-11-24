@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 640">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e8f3ff"/>
+      <stop offset="1" stop-color="#f2ebff"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="640" fill="url(#bg)"/>
+  <g fill="none" stroke-linecap="round">
+    <path d="M0 360 C 150 200, 300 200, 450 330 S 750 480, 900 320 S 1100 180, 1200 260" stroke="#3182f6" stroke-width="8"/>
+    <path d="M0 400 C 150 260, 300 260, 450 380 S 750 520, 900 370 S 1100 240, 1200 310" stroke="#3182f6" stroke-width="4" opacity=".45"/>
+    <path d="M0 440 C 150 320, 300 320, 450 430 S 750 560, 900 420 S 1100 300, 1200 360" stroke="#8b5cf6" stroke-width="3" opacity=".35"/>
+  </g>
+  <g font-family="Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" fill="#191f28">
+    <text x="80" y="140" font-size="64" font-weight="800">Research Journal</text>
+    <text x="80" y="200" font-size="30" fill="#4e5968">E(r) = −jωμ ∫ [ J + ∇(∇′·J)/k² ] G dS′</text>
+  </g>
+</svg>
