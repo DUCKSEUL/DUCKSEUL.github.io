@@ -1,107 +1,154 @@
 import { useMemo, useState } from 'react'
-import { Icon, toast, useDocumentTitle } from '../components/ui.jsx'
-import FormModal from '../components/FormModal.jsx'
+import { Icon, useDocumentTitle } from '../components/ui.jsx'
+import RadarSettings from '../components/RadarSettings.jsx'
 import { useAdmin } from '../lib/admin.js'
-import { useSiteData, saveSiteData } from '../lib/siteData.js'
-import { useSheetPapers, parseSheetUrl, fetchSheet } from '../lib/sheets.js'
+import { useSiteData } from '../lib/siteData.js'
+import { useRadarPapers, useSortedPapers } from '../lib/sheets.js'
 
-const ROLE_LABEL = { title: '제목', authors: '저자', venue: '저널/학회', year: '연도', tags: '키워드', summary: '요약', link: '링크', status: '읽음상태' }
+const statusTone = (s) => (/읽음$|완료|done|^read$/i.test(s) ? 'done' : /읽는|진행|reading/i.test(s) ? 'doing' : s ? 'todo' : '')
+const fmt = (d) => (d ? d.replace(/-/g, '.') : '')
+const MODE_LABEL = { sample: '샘플 데이터', gviz: 'Google Sheets (링크 공유)', apikey: 'Google Sheets API · API Key', oauth: 'Google Sheets API · OAuth (비공개)' }
 
-const statusTone = (s) => (/읽음$|완료|done|read$/i.test(s) ? 'done' : /읽는|진행|reading/i.test(s) ? 'doing' : s ? 'todo' : '')
+function readPref(key, fallback) {
+  try {
+    return localStorage.getItem(key) || fallback
+  } catch {
+    return fallback
+  }
+}
+function writePref(key, v) {
+  try {
+    localStorage.setItem(key, v)
+  } catch {
+    /* ignore */
+  }
+}
 
-export function SheetGuide({ compact = false }) {
+export function SheetGuide() {
   return (
-    <div className={`sheet-guide ${compact ? 'compact' : ''}`}>
+    <div className="sheet-guide">
       <h3>
-        <Icon name="table" size={18} /> Google Sheets 연결 설정 가이드
+        <Icon name="table" size={18} /> Google Sheets 연결 가이드
       </h3>
       <ol>
         <li>
-          Google Sheets 첫 번째 행에 헤더를 적어 주세요. 예: <code>제목</code> <code>저자</code> <code>저널/학회</code> <code>연도</code>{' '}
-          <code>키워드/태그</code> <code>한줄요약</code> <code>링크</code> <code>읽음상태</code> (영어 헤더도 자동 인식)
+          첫 행에 헤더를 적어 주세요: <code>기록일</code> <code>제목</code> <code>저자</code> <code>저널/학회</code> <code>발행연도</code> <code>키워드/태그</code>{' '}
+          <code>한줄요약</code> <code>DOI/원문 링크</code> <code>중요도</code> <code>읽음상태</code> — 이름·순서가 달라도 설정에서 매핑할 수 있어요.
         </li>
         <li>
-          오른쪽 위 <b>공유</b> → 일반 액세스를 <b>「링크가 있는 모든 사용자」 · 뷰어</b>로 바꾸고 <b>링크 복사</b>.
+          새 논문은 <b>아래 행에 계속 추가</b>하고 <b>기록일(YYYY-MM-DD)</b>을 적으면, 웹사이트에서는 자동으로 <b>최신 기록이 맨 위</b>로 정렬돼요.
         </li>
         <li>
-          이 페이지의 <b>시트 연결 설정</b>(Admin)에 링크를 붙여 넣고, 여러 탭이 있으면 탭 이름을 적어 저장하세요.
+          공유 방식 선택: 공개해도 되면 <b>「링크가 있는 모든 사용자 · 뷰어」</b>(키 불필요) 또는 <b>제한된 API Key</b>, 비공개로 두려면 <b>OAuth</b>(관리자만 열람).
         </li>
       </ol>
-      {!compact && (
-        <p className="muted sm">
-          API 키나 서버 없이 브라우저가 Google Visualization API(<code>gviz/tq?tqx=out:json</code>)로 시트를 직접 읽어요. 시트를 고치면 새로고침만으로
-          바로 반영돼요. 링크 공유를 켠 시트는 링크를 아는 누구나 볼 수 있으니 공개해도 되는 내용만 넣어 주세요.
-        </p>
-      )}
     </div>
   )
 }
 
-function PaperCard({ p }) {
+function ChipGroup({ label, items, value, onChange }) {
+  if (!items.length) return null
+  return (
+    <div className="chip-group" role="group" aria-label={`${label} 필터`}>
+      <span className="chip-label">{label}</span>
+      <div className="kw-chips">
+        {items.map(([v, n]) => (
+          <button key={v} className={`kw-chip ${value === v ? 'is-active' : ''}`} aria-pressed={value === v} onClick={() => onChange(value === v ? '' : v)}>
+            {v} <span>{n}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function OpenLink({ href, children = '원문 보기', className = 'btn btn-sm btn-weak' }) {
+  if (!href) return null
+  return (
+    <a className={className} href={href} target="_blank" rel="noreferrer">
+      {children} <Icon name="external" size={13} />
+    </a>
+  )
+}
+
+function PaperCard({ p, rank }) {
   const tone = statusTone(p.status)
   return (
-    <li className="paper">
+    <li className={`paper ${p.important ? 'is-important' : ''}`} data-date={p.date} data-rank={rank}>
       <p className="paper-meta">
+        <span className="date-badge" title="기록일">
+          <Icon name="calendar" size={12} /> {fmt(p.date) || '날짜 없음'}
+        </span>
+        {p.important && <em className="hl-badge">★ 중요</em>}
         {p.status && <em className={`status-tag st-${tone}`}>{p.status}</em>}
-        {[p.venue, p.year].filter(Boolean).join(' · ')}
       </p>
-      <h3>
-        {p.link ? (
-          <a href={p.link} target="_blank" rel="noreferrer">
-            {p.title} <Icon name="external" size={13} />
-          </a>
-        ) : (
-          p.title
-        )}
-      </h3>
+      <h3>{p.title}</h3>
       {p.authors && <p className="paper-authors">{p.authors}</p>}
-      {p.summary && <p className="paper-sum">{p.summary}</p>}
-      {p.tags.length > 0 && (
-        <p className="paper-tags">
-          {p.tags.map((t) => (
-            <span key={t}>#{t}</span>
-          ))}
+      {(p.venue || p.year) && (
+        <p className="paper-venue">
+          {p.venue && <span className="venue-badge">{p.venue}</span>}
+          {p.year && <span className="year-badge">{p.year}</span>}
         </p>
       )}
+      {p.summary && <p className="paper-sum">{p.summary}</p>}
+      <div className="paper-foot">
+        {p.tags.length > 0 && (
+          <p className="paper-tags">
+            {p.tags.map((t) => (
+              <span key={t}>#{t}</span>
+            ))}
+          </p>
+        )}
+        <OpenLink href={p.link} />
+      </div>
     </li>
   )
 }
 
-function PaperTable({ data, papers }) {
-  // 시트의 원래 열을 그대로 보여 주되, 링크 열은 클릭 가능하게
-  const linkCol = data.roles.link
-  const ids = new Set(papers.map((p) => p.id))
-  const all = data.papers.filter((p) => ids.has(p.id))
+function PaperTable({ papers }) {
   return (
     <div className="sheet-table-wrap">
       <table className="sheet-table">
         <thead>
           <tr>
-            {data.headers.map((h, i) => (
-              <th key={i} scope="col">
-                {h}
-              </th>
-            ))}
+            <th scope="col">기록일</th>
+            <th scope="col">제목</th>
+            <th scope="col">저자</th>
+            <th scope="col">저널/학회</th>
+            <th scope="col">연도</th>
+            <th scope="col">키워드</th>
+            <th scope="col">중요도</th>
+            <th scope="col">상태</th>
+            <th scope="col">원문</th>
           </tr>
         </thead>
         <tbody>
-          {all.map((p) => (
-            <tr key={p.id}>
-              {p.raw.map((v, i) =>
-                i === linkCol && p.link ? (
-                  <td key={i}>
-                    <a href={p.link} target="_blank" rel="noreferrer">
-                      열기 <Icon name="external" size={12} />
-                    </a>
-                  </td>
-                ) : i === data.roles.title ? (
-                  <th key={i} scope="row">
-                    {v}
-                  </th>
-                ) : (
-                  <td key={i}>{v}</td>
-                ),
-              )}
+          {papers.map((p) => (
+            <tr key={p.id} className={p.important ? 'is-important' : ''} data-date={p.date}>
+              <td>
+                <span className="date-badge">{fmt(p.date) || '—'}</span>
+              </td>
+              <th scope="row">
+                {p.title}
+                {p.summary && <small>{p.summary}</small>}
+              </th>
+              <td>{p.authors}</td>
+              <td>{p.venue}</td>
+              <td>{p.year}</td>
+              <td>
+                <span className="tbl-tags">
+                  {p.tags.map((t) => (
+                    <span key={t}>#{t}</span>
+                  ))}
+                </span>
+              </td>
+              <td>{p.important ? <em className="hl-badge">★ 중요</em> : p.importance}</td>
+              <td>{p.status && <em className={`status-tag st-${statusTone(p.status)}`}>{p.status}</em>}</td>
+              <td>
+                <OpenLink href={p.link} className="tbl-link">
+                  열기
+                </OpenLink>
+              </td>
             </tr>
           ))}
         </tbody>
@@ -110,60 +157,43 @@ function PaperTable({ data, papers }) {
   )
 }
 
+const tally = (list, pick) => {
+  const m = new Map()
+  list.forEach((p) => [].concat(pick(p)).forEach((v) => v && m.set(v, (m.get(v) || 0) + 1)))
+  return [...m.entries()]
+}
+
 export default function Radar() {
   useDocumentTitle('논문 레이더 · DUCKSEUL')
   const { isAdmin } = useAdmin()
   const { data: radar, ready } = useSiteData('radar')
-  const sheetUrl = radar?.sheetUrl || ''
-  const sheetName = radar?.sheetName || ''
-  const sheet = useSheetPapers(ready ? sheetUrl : '', sheetName)
-  const [view, setView] = useState(() => {
-    try {
-      return localStorage.getItem('radar-view') || 'card'
-    } catch {
-      return 'card'
-    }
-  })
+  const sheet = useRadarPapers(radar, ready)
+  const [view, setView] = useState(() => readPref('radar-view', 'card'))
+  const [order, setOrder] = useState(() => readPref('radar-order', 'newest'))
   const [tag, setTag] = useState('')
+  const [venue, setVenue] = useState('')
+  const [year, setYear] = useState('')
+  const [onlyImportant, setOnlyImportant] = useState(false)
   const [q, setQ] = useState('')
   const [settings, setSettings] = useState(false)
 
-  const papers = sheet.data?.papers || []
-  const tags = useMemo(() => {
-    const m = new Map()
-    papers.forEach((p) => p.tags.forEach((t) => m.set(t, (m.get(t) || 0) + 1)))
-    return [...m.entries()].sort((a, b) => b[1] - a[1])
-  }, [papers])
+  const sorted = useSortedPapers(sheet.data, order)
+  const tags = useMemo(() => tally(sorted, (p) => p.tags).sort((a, b) => b[1] - a[1]), [sorted])
+  const venues = useMemo(() => tally(sorted, (p) => p.venue).sort((a, b) => b[1] - a[1]).slice(0, 12), [sorted])
+  const years = useMemo(() => tally(sorted, (p) => p.year).sort((a, b) => String(b[0]).localeCompare(String(a[0]))), [sorted])
   const needle = q.trim().toLowerCase()
-  const shown = papers.filter(
-    (p) => (!tag || p.tags.includes(tag)) && (!needle || [p.title, p.authors, p.venue, p.summary, p.tags.join(' ')].join(' ').toLowerCase().includes(needle)),
+  const shown = sorted.filter(
+    (p) =>
+      (!tag || p.tags.includes(tag)) &&
+      (!venue || p.venue === venue) &&
+      (!year || p.year === year) &&
+      (!onlyImportant || p.important) &&
+      (!needle || [p.title, p.authors, p.venue, p.summary, p.year, p.tags.join(' ')].join(' ').toLowerCase().includes(needle)),
   )
+  const importantCount = sorted.filter((p) => p.important).length
+  const filtered = tag || venue || year || onlyImportant || needle
 
-  const switchView = (v) => {
-    setView(v)
-    try {
-      localStorage.setItem('radar-view', v)
-    } catch {
-      /* ignore */
-    }
-  }
-
-  const saveSettings = async (v) => {
-    const url = v.sheetUrl.trim()
-    if (url && !parseSheetUrl(url)) throw new Error('Google Sheets 링크 형식이 아니에요. (docs.google.com/spreadsheets/d/…)')
-    if (url) {
-      const test = await fetchSheet(url, v.sheetName.trim()) // 저장 전에 실제로 읽히는지 확인
-      if (!test.papers.length) throw new Error('시트는 읽었지만 제목이 있는 행이 없어요. 첫 행 헤더와 데이터를 확인해 주세요.')
-    }
-    await saveSiteData('radar', { ...radar, sheetUrl: url, sheetName: v.sheetName.trim() }, url ? 'radar: Google Sheets 연결 설정' : 'radar: Google Sheets 연결 해제')
-    toast(url ? '시트를 연결했어요. 1~2분 뒤 모든 방문자에게 반영돼요.' : '시트 연결을 해제했어요.')
-    setSettings(false)
-  }
-
-  const roles = sheet.data?.roles || {}
-  const detected = Object.entries(roles)
-    .filter(([r]) => ROLE_LABEL[r])
-    .map(([r, i]) => `${ROLE_LABEL[r]} ← ${sheet.data.headers[i]}`)
+  const choose = (setter, key) => (v) => (setter(v), writePref(key, v))
 
   return (
     <section className="page">
@@ -172,17 +202,17 @@ export default function Radar() {
           <div>
             <p className="eyebrow">Paper Radar</p>
             <h1 className="page-title">논문 레이더</h1>
-            <p className="page-sub">Google Sheets에 정리한 관심 논문을 실시간으로 불러와요.</p>
+            <p className="page-sub">Google Sheets에 기록한 관심 논문을 실시간으로 불러와, 가장 최근에 기록한 논문부터 보여 줘요.</p>
           </div>
           <div className="page-actions">
-            {sheetUrl && (
+            {!sheet.sample && !sheet.needsAuth && (
               <button className="btn btn-md btn-ghost" onClick={sheet.reload} disabled={sheet.loading}>
                 <Icon name="refresh" size={16} /> {sheet.loading ? '불러오는 중…' : '새로고침'}
               </button>
             )}
             {isAdmin && (
               <button className="btn btn-md btn-primary" onClick={() => setSettings(true)}>
-                <Icon name="table" size={16} /> 시트 연결 설정
+                <Icon name="lock" size={16} /> Google Sheets API 설정
               </button>
             )}
           </div>
@@ -191,9 +221,19 @@ export default function Radar() {
         {sheet.sample && (
           <div className="card sample-banner">
             <p>
-              <em className="badge warn">샘플 데이터</em> 아직 Google Sheets가 연결되지 않아 예시 논문을 보여 주고 있어요.
+              <em className="badge warn">샘플 데이터</em> 아직 Google Sheets가 연결되지 않아 예시 논문을 보여 주고 있어요. 맨 아래 3편이 가장 먼저 기록한 초기
+              자료예요.
             </p>
             <SheetGuide />
+          </div>
+        )}
+
+        {sheet.needsAuth && (
+          <div className="card sample-banner">
+            <p>
+              <Icon name="lock" size={18} /> 이 논문 레이더는 <b>비공개 Google Sheets</b>와 연결되어 있어 관리자만 볼 수 있어요.
+            </p>
+            {isAdmin && <p className="muted">「Google Sheets API 설정」에서 Sheets 읽기 권한을 연결하면 이 브라우저에서만 표시돼요.</p>}
           </div>
         )}
 
@@ -202,80 +242,98 @@ export default function Radar() {
             <p className="form-error" role="alert">
               {sheet.error}
             </p>
-            {isAdmin && <SheetGuide compact />}
           </div>
-        )}
-
-        <div className="radar-toolbar card">
-          <div className="radar-search">
-            <Icon name="search" size={16} />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="제목·저자·요약 검색" aria-label="논문 검색" />
-          </div>
-          <div className="view-toggle" role="group" aria-label="보기 방식">
-            <button className={view === 'card' ? 'is-active' : ''} aria-pressed={view === 'card'} onClick={() => switchView('card')}>
-              <Icon name="note" size={16} /> 카드
-            </button>
-            <button className={view === 'table' ? 'is-active' : ''} aria-pressed={view === 'table'} onClick={() => switchView('table')}>
-              <Icon name="table" size={16} /> 테이블
-            </button>
-          </div>
-          {tags.length > 0 && (
-            <div className="kw-chips">
-              <button className={`kw-chip ${!tag ? 'is-active' : ''}`} aria-pressed={!tag} onClick={() => setTag('')}>
-                전체 <span>{papers.length}</span>
-              </button>
-              {tags.map(([t, n]) => (
-                <button key={t} className={`kw-chip ${tag === t ? 'is-active' : ''}`} aria-pressed={tag === t} onClick={() => setTag(tag === t ? '' : t)}>
-                  #{t} <span>{n}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {sheet.loading && !sheet.data ? (
-          <p className="muted">시트를 불러오는 중…</p>
-        ) : shown.length ? (
-          view === 'table' ? (
-            <PaperTable data={sheet.data} papers={shown} />
-          ) : (
-            <ul className="paper-grid">
-              {shown.map((p) => (
-                <PaperCard key={p.id} p={p} />
-              ))}
-            </ul>
-          )
-        ) : (
-          sheet.data && <p className="empty">조건에 맞는 논문이 없어요.</p>
         )}
 
         {sheet.data && (
-          <p className="sheet-foot muted sm">
-            {sheet.sample ? '샘플' : 'Google Sheets'} · {papers.length}편
-            {sheet.data.fetchedAt && ` · ${sheet.data.fetchedAt.toTimeString().slice(0, 5)} 불러옴`}
-            {isAdmin && detected.length > 0 && <> · 인식한 열: {detected.join(', ')}</>}
-          </p>
+          <>
+            <div className="radar-toolbar card">
+              <div className="radar-row">
+                <div className="radar-search">
+                  <Icon name="search" size={16} />
+                  <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="제목·저자·요약·키워드 검색" aria-label="논문 검색" />
+                  {q && (
+                    <button onClick={() => setQ('')} aria-label="검색어 지우기">
+                      <Icon name="close" size={14} />
+                    </button>
+                  )}
+                </div>
+                <div className="view-toggle" role="group" aria-label="정렬">
+                  <button className={order === 'newest' ? 'is-active' : ''} aria-pressed={order === 'newest'} onClick={() => choose(setOrder, 'radar-order')('newest')}>
+                    최신 기록순
+                  </button>
+                  <button className={order === 'oldest' ? 'is-active' : ''} aria-pressed={order === 'oldest'} onClick={() => choose(setOrder, 'radar-order')('oldest')}>
+                    오래된순
+                  </button>
+                </div>
+                <div className="view-toggle" role="group" aria-label="보기 방식">
+                  <button className={view === 'card' ? 'is-active' : ''} aria-pressed={view === 'card'} onClick={() => choose(setView, 'radar-view')('card')}>
+                    <Icon name="note" size={16} /> 카드
+                  </button>
+                  <button className={view === 'table' ? 'is-active' : ''} aria-pressed={view === 'table'} onClick={() => choose(setView, 'radar-view')('table')}>
+                    <Icon name="table" size={16} /> 테이블
+                  </button>
+                </div>
+              </div>
+              <div className="chip-groups">
+                {importantCount > 0 && (
+                  <div className="chip-group">
+                    <span className="chip-label">하이라이트</span>
+                    <div className="kw-chips">
+                      <button className={`kw-chip hl ${onlyImportant ? 'is-active' : ''}`} aria-pressed={onlyImportant} onClick={() => setOnlyImportant((v) => !v)}>
+                        ★ 중요 논문 <span>{importantCount}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <ChipGroup label="키워드" items={tags} value={tag} onChange={setTag} />
+                <ChipGroup label="저널" items={venues} value={venue} onChange={setVenue} />
+                <ChipGroup label="연도" items={years} value={year} onChange={setYear} />
+              </div>
+            </div>
+
+            <p className="radar-count">
+              {filtered ? `${shown.length} / ${sorted.length}편` : `${sorted.length}편`} · {order === 'newest' ? '최신 기록이 위' : '오래된 기록이 위'}
+              {filtered && (
+                <button
+                  className="link-btn"
+                  onClick={() => {
+                    setTag('')
+                    setVenue('')
+                    setYear('')
+                    setOnlyImportant(false)
+                    setQ('')
+                  }}
+                >
+                  필터 초기화
+                </button>
+              )}
+            </p>
+
+            {shown.length ? (
+              view === 'table' ? (
+                <PaperTable papers={shown} />
+              ) : (
+                <ul className="paper-grid">
+                  {shown.map((p, i) => (
+                    <PaperCard key={p.id} p={p} rank={i} />
+                  ))}
+                </ul>
+              )
+            ) : (
+              <p className="empty">조건에 맞는 논문이 없어요.</p>
+            )}
+
+            <p className="sheet-foot muted sm">
+              {MODE_LABEL[sheet.mode]}
+              {sheet.data.fetchedAt && ` · ${sheet.data.fetchedAt.toTimeString().slice(0, 5)} 불러옴`}
+            </p>
+          </>
         )}
+        {sheet.loading && !sheet.data && <p className="muted">시트를 불러오는 중…</p>}
       </div>
 
-      <FormModal
-        open={isAdmin && settings}
-        title="Google Sheets 연결 설정"
-        fields={[
-          {
-            name: 'sheetUrl',
-            label: '시트 공유 링크 (또는 시트 ID)',
-            full: true,
-            placeholder: 'https://docs.google.com/spreadsheets/d/…/edit?usp=sharing',
-            hint: '비워 두고 저장하면 연결이 해제되고 샘플 데이터가 보여요.',
-          },
-          { name: 'sheetName', label: '시트 탭 이름 (선택)', full: true, placeholder: '예: Papers — 비우면 링크의 탭(gid) 또는 첫 번째 탭' },
-        ]}
-        initial={{ sheetUrl, sheetName }}
-        submitLabel="확인 후 저장"
-        onSubmit={saveSettings}
-        onClose={() => setSettings(false)}
-      />
+      <RadarSettings open={isAdmin && settings} onClose={() => setSettings(false)} radar={radar} />
     </section>
   )
 }

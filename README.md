@@ -29,10 +29,22 @@
 관리자 모드에서 저장하면 해당 JSON이 GitHub 저장소에 커밋되고 Actions가 자동 배포합니다(1~2분).
 
 ## 논문 레이더 — Google Sheets
-1. 시트 첫 행에 헤더: `제목` `저자` `저널/학회` `연도` `키워드/태그` `한줄요약` `링크` `읽음상태` (영어 `Title`, `Authors`, `Journal`, `Year`, `Keywords`, `Summary`, `URL`, `Status`도 자동 인식)
-2. 공유 → 일반 액세스 **「링크가 있는 모든 사용자」· 뷰어** → 링크 복사
-3. 논문 레이더 → **시트 연결 설정**에 링크(필요하면 탭 이름) 저장. API 키 없이 `gviz/tq?tqx=out:json`으로 브라우저가 직접 읽습니다.
-- 연결 전에는 샘플 논문 4편과 설정 가이드가 보입니다. 링크 공유를 켠 시트는 링크를 아는 누구나 볼 수 있으니 공개 가능한 내용만 넣으세요.
+- **정렬**: 기록일(Date) 내림차순 — 시트 아래 행에 새 논문을 계속 추가해도 사이트에서는 **최신 기록이 맨 위**, 가장 오래된 초기 자료가 맨 아래.
+  같은 날짜면 시트에서 나중에 추가된 행이 위, 기록일이 없는 행은 맨 아래. 상단 토글로 「오래된순」 전환. 홈 위젯도 같은 순서로 상위 4건.
+- **헤더**(첫 행): `기록일` `제목` `저자` `저널/학회` `발행연도` `키워드/태그` `한줄요약` `DOI/원문 링크` `중요도` `읽음상태` — 영어/다른 이름도 자동 인식,
+  안 맞으면 설정의 **컬럼 매핑**에서 직접 지정. 날짜는 `2026-11-24`, `2026.11.24`, `2026/11/24`, `2026. 11. 24` 모두 인식.
+  중요도에 `★★★`, `높음`, `high`, `Y`, `3` 이상 등을 적으면 ★ 중요 하이라이트.
+- **화면**: 리서치 카드 그리드 ↔ 데이터 테이블, 키워드·저널·연도·중요 필터 칩, 실시간 검색, 원문 바로가기.
+- **데이터 소스**(논문 레이더 → Google Sheets API 설정, 관리자):
+  | 모드 | 대상 | 방식 |
+  | --- | --- | --- |
+  | 샘플 | 연결 전 | 고전 논문 6편 (맨 아래 3편이 초기 자료) |
+  | 링크 공유 | 공개 시트 | 키 없이 `gviz/tq?tqx=out:json` |
+  | API Key | 공개 시트 | `sheets.googleapis.com/v4/spreadsheets/{ID}/values/{RANGE}?key=` — 브라우저용 공개 키라 radar.json에 저장되므로 반드시 제한 |
+  | OAuth | 비공개 시트 | GIS Token Client, `spreadsheets.readonly` — 관리자 브라우저에서만 표시, 방문자에게는 잠금 안내 |
+- **보안 잠금**: API Key → 애플리케이션 제한사항 *웹사이트(HTTP 리퍼러)* 에 `https://duckseul.github.io/*`, `http://localhost:5173/*`만,
+  API 제한사항은 *Google Sheets API*만. OAuth Client ID → 승인된 JavaScript 원본에 `https://duckseul.github.io`, `http://localhost:5173`만.
+  Client Secret은 사용하지 않으며, OAuth 토큰은 메모리 + sessionStorage에만 보관(localStorage·저장소 X).
 
 ## 캘린더 — Google Calendar (읽기 전용)
 - Google Identity Services **Token Client** 방식, 공개용 OAuth Client ID만 사용 (Client Secret 없음). 권한은 `calendar.readonly` 하나.

@@ -1,89 +1,123 @@
-// 논문 레이더: Google Sheets 실시간 연동 (API 키·백엔드 없음)
-// '링크가 있는 모든 사용자: 뷰어'로 공유된 시트를 Google Visualization API(gviz/tq?tqx=out:json)로 읽습니다.
-// 첫 번째 행을 헤더로 보고(headers=1), 열 이름을 자동으로 인식해 제목·저자·저널·연도·키워드·요약·링크·읽음상태로 매핑합니다.
-import { useEffect, useState } from 'react'
+// 논문 레이더 데이터: Google Sheets
+// ─ 데이터 소스 (public/data/radar.json 의 mode) ───────────────────────────
+//  sample : 연결 전 기본 샘플
+//  gviz   : 「링크가 있는 모든 사용자」 공유 시트 — 키 없이 gviz/tq 로 읽음
+//  apikey : 공식 Sheets API v4 + 브라우저용 API Key (HTTP 리퍼러 + Sheets API로 제한된 공개 키)
+//  oauth  : 공식 Sheets API v4 + GIS Token(spreadsheets.readonly) — 비공개 시트, 관리자 브라우저에서만
+// ─ 보안 ──────────────────────────────────────────────────────────────────
+//  Client Secret·OAuth 토큰은 어디에도 저장/커밋하지 않습니다. OAuth 토큰은 google.js가 메모리+sessionStorage에만 둡니다.
+//  API Key는 원래 브라우저에 노출되는 공개 값이므로, 반드시 리퍼러·API 제한을 건 키만 사용합니다.
+// ─ 정렬 ──────────────────────────────────────────────────────────────────
+//  기록일(Date) 내림차순 = 최신 기록이 맨 위. 같은 날짜면 시트에서 나중에 추가된(아래쪽) 행이 위.
+//  기록일이 없는 행은 날짜가 있는 행들 아래(시트 아래쪽 행이 위).
+import { useEffect, useMemo, useState } from 'react'
+import { useAdmin } from './admin.js'
+import { useGoogle, gapi } from './google.js'
 
-/** 시트 공유 링크 또는 ID → { id, gid } */
-export function parseSheetUrl(input = '') {
-  const s = input.trim()
-  if (!s) return null
-  const m = s.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]{20,})/)
-  const id = m ? m[1] : /^[a-zA-Z0-9-_]{20,}$/.test(s) ? s : null
-  if (!id) return null
-  const gid = s.match(/[#?&]gid=(\d+)/)?.[1] || ''
-  return { id, gid }
-}
+export const ROLE_DEFS = [
+  { role: 'date', label: '기록일', names: ['기록일', '등록일', '날짜', '추가일', '기록 날짜', 'date', 'added', 'recorded', 'logged'] },
+  { role: 'title', label: '제목', names: ['제목', '논문 제목', '논문제목', '논문', 'title', 'paper', 'name'] },
+  { role: 'authors', label: '저자', names: ['저자', '저자명', 'author', 'authors', 'by'] },
+  { role: 'venue', label: '저널/학회', names: ['저널/학회', '저널', '학회', '출처', '게재지', 'venue', 'journal', 'conference', 'source', 'publication'] },
+  { role: 'year', label: '발행연도', names: ['발행연도', '연도', '년도', '출판연도', 'year', 'pub year', 'published'] },
+  { role: 'tags', label: '키워드/태그', names: ['키워드/태그', '키워드', '태그', '분야', 'keyword', 'keywords', 'tag', 'tags', 'topic'] },
+  { role: 'summary', label: '한줄요약', names: ['한줄요약', '한 줄 요약', '요약', '메모', 'summary', 'note', 'notes', 'tl;dr', 'abstract'] },
+  { role: 'link', label: 'DOI/원문 링크', names: ['doi/원문 링크', '원문 링크', '원문', '링크', '주소', 'doi', 'url', 'link', 'pdf'] },
+  { role: 'importance', label: '중요도', names: ['중요도', '중요', '우선순위', 'importance', 'priority', 'star', 'stars', 'rating'] },
+  { role: 'status', label: '읽음상태', names: ['읽음상태', '읽음 상태', '상태', '읽음', 'status', 'read', 'state'] },
+]
+const norm = (s) =>
+  String(s || '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
 
-export function gvizUrl({ id, gid }, sheetName) {
-  const q = new URLSearchParams({ tqx: 'out:json', headers: '1' })
-  if (sheetName) q.set('sheet', sheetName)
-  else if (gid) q.set('gid', gid)
-  return `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?${q}`
-}
-
-// 헤더 이름 → 역할 (한국어/영어 동의어)
-const ROLES = {
-  title: ['제목', '논문', '논문 제목', '논문제목', 'title', 'paper', 'name'],
-  authors: ['저자', '저자명', 'author', 'authors', 'by'],
-  venue: ['저널/학회', '저널', '학회', '출처', '게재', 'venue', 'journal', 'conference', 'source', 'publication'],
-  year: ['연도', '년도', '발행연도', 'year', 'date', '날짜'],
-  tags: ['키워드/태그', '키워드', '태그', 'keyword', 'keywords', 'tag', 'tags', 'topic', '분야'],
-  summary: ['한줄요약', '한 줄 요약', '요약', '메모', 'summary', 'note', 'notes', 'tl;dr', 'abstract'],
-  link: ['링크', '원문', '주소', 'url', 'link', 'doi', 'pdf'],
-  status: ['읽음상태', '읽음 상태', '상태', '읽음', 'status', 'read', 'state'],
-}
-const norm = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim()
-
-export function detectRoles(headers) {
+/** 헤더 → 역할별 열 번호. overrides: { role: '헤더 이름' } (컬럼 매핑 설정) */
+export function detectRoles(headers, overrides = {}) {
   const map = {}
-  headers.forEach((h, i) => {
-    const n = norm(h)
-    for (const [role, names] of Object.entries(ROLES)) {
-      if (map[role] !== undefined) continue
-      if (names.some((x) => n === x || n.replace(/\s/g, '') === x.replace(/\s/g, ''))) {
-        map[role] = i
-        return
-      }
+  const used = new Set()
+  for (const [role, name] of Object.entries(overrides || {})) {
+    const i = headers.findIndex((h) => norm(h) === norm(name))
+    if (name && i >= 0) {
+      map[role] = i
+      used.add(i)
     }
-  })
-  // 정확히 맞는 이름이 없으면 포함 관계로 한 번 더
-  headers.forEach((h, i) => {
-    const n = norm(h)
-    if (Object.values(map).includes(i)) return
-    for (const [role, names] of Object.entries(ROLES)) {
-      if (map[role] === undefined && names.some((x) => x.length > 1 && n.includes(x))) {
-        map[role] = i
-        return
+  }
+  const pass = (match) =>
+    headers.forEach((h, i) => {
+      if (used.has(i)) return
+      const n = norm(h)
+      const def = ROLE_DEFS.find((d) => map[d.role] === undefined && d.names.some((x) => match(n, x)))
+      if (def) {
+        map[def.role] = i
+        used.add(i)
       }
-    }
-  })
-  if (map.title === undefined && headers.length) map.title = 0
+    })
+  pass((n, x) => n === x || n.replace(/\s/g, '') === x.replace(/\s/g, ''))
+  pass((n, x) => x.length > 2 && n.includes(x))
+  if (map.title === undefined) {
+    const i = headers.findIndex((_, k) => !used.has(k))
+    if (i >= 0) map.title = i
+  }
   return map
+}
+
+/** 다양한 날짜 표기 → 'YYYY-MM-DD' (인식 못 하면 '') */
+export function normDate(v) {
+  const s = String(v ?? '').trim()
+  if (!s) return ''
+  let m = s.match(/^Date\((\d{4}),(\d{1,2}),(\d{1,2})/) // gviz 원시 값 (월 0부터)
+  if (m) return `${m[1]}-${String(+m[2] + 1).padStart(2, '0')}-${m[3].padStart(2, '0')}`
+  m = s.match(/(\d{4})\s*[-./년]\s*(\d{1,2})\s*[-./월]\s*(\d{1,2})/)
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/) // 미국식 M/D/YYYY
+  if (m) return `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`
+  if (/^\d{5}$/.test(s)) {
+    // 스프레드시트 일련번호 (1899-12-30 기준)
+    const d = new Date(Date.UTC(1899, 11, 30) + Number(s) * 86400000)
+    return d.toISOString().slice(0, 10)
+  }
+  return ''
 }
 
 const splitTags = (v) =>
   String(v || '')
-    .split(/[,;#/|·\n]+/)
+    .split(/[,;#|·\n]+/)
     .map((t) => t.trim())
     .filter(Boolean)
 
-/** 2차원 배열(헤더 + 행) → 정규화된 논문 목록 */
-export function toPapers(headers, rows) {
-  const r = detectRoles(headers)
+/** 중요 논문 여부: ★★★, 높음, 상, high, 중요, Y, 3 이상 등 */
+export function isImportant(v) {
+  const s = norm(v)
+  if (!s) return false
+  if ((s.match(/[★⭐]/g) || []).length >= 3) return true
+  if (/^(높음|상|중요|매우 중요|필독|high|important|must|y|yes|true|o|✓|✔|!+)$/.test(s)) return true
+  const n = Number(s)
+  return !Number.isNaN(n) && n >= 3
+}
+
+export function toPapers(headers, rows, overrides) {
+  const r = detectRoles(headers, overrides)
   const get = (row, role) => (r[role] === undefined ? '' : String(row[r[role]] ?? '').trim())
   return rows
-    .map((row, i) => {
+    .map((row, rowIndex) => {
       const linkRaw = get(row, 'link')
-      const link = /^https?:\/\//i.test(linkRaw) ? linkRaw : /^10\.\d{4,}\//.test(linkRaw) ? `https://doi.org/${linkRaw}` : ''
+      const doi = linkRaw.match(/\b(10\.\d{4,9}\/\S+)/)?.[1]
+      const link = /^https?:\/\//i.test(linkRaw) ? linkRaw : doi ? `https://doi.org/${doi}` : ''
+      const year = get(row, 'year').match(/\d{4}/)?.[0] || get(row, 'year')
       return {
-        id: `row-${i}`,
+        id: `row-${rowIndex}`,
+        rowIndex,
+        date: normDate(get(row, 'date')),
         title: get(row, 'title'),
         authors: get(row, 'authors'),
         venue: get(row, 'venue'),
-        year: get(row, 'year'),
+        year,
         tags: splitTags(get(row, 'tags')),
         summary: get(row, 'summary'),
         link,
+        importance: get(row, 'importance'),
+        important: isImportant(get(row, 'importance')),
         status: get(row, 'status'),
         raw: row,
       }
@@ -91,7 +125,28 @@ export function toPapers(headers, rows) {
     .filter((p) => p.title)
 }
 
-/** gviz 응답 텍스트 → { headers, rows } */
+/** order: 'newest'(기본) | 'oldest' */
+export function sortPapers(papers, order = 'newest') {
+  const dir = order === 'oldest' ? -1 : 1
+  return [...papers].sort((a, b) => {
+    if (a.date && b.date && a.date !== b.date) return a.date < b.date ? dir : -dir
+    if (!!a.date !== !!b.date) return a.date ? -1 : 1 // 날짜 없는 행은 항상 아래
+    return (b.rowIndex - a.rowIndex) * dir // 같은 날짜: 나중에 추가된 행이 위
+  })
+}
+
+/* ── 공유 링크 / 범위 ─────────────────────────────── */
+export function parseSheetUrl(input = '') {
+  const s = input.trim()
+  if (!s) return null
+  const m = s.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]{20,})/)
+  const id = m ? m[1] : /^[a-zA-Z0-9-_]{20,}$/.test(s) ? s : null
+  if (!id) return null
+  return { id, gid: s.match(/[#?&]gid=(\d+)/)?.[1] || '' }
+}
+const a1Range = (sheetName) => (sheetName ? `'${sheetName.replace(/'/g, "''")}'!A1:Z2000` : 'A1:Z2000')
+
+/* ── 1) gviz (링크 공유 시트, 키 없음) ─────────────── */
 export function parseGviz(text) {
   const start = text.indexOf('setResponse(')
   if (start < 0) throw new Error('시트를 읽을 수 없어요. 공유 설정이 「링크가 있는 모든 사용자: 뷰어」인지 확인해 주세요.')
@@ -106,95 +161,184 @@ export function parseGviz(text) {
     cols.map((c, i) => {
       const cell = r.c?.[i]
       if (!cell) return ''
-      // 날짜/숫자는 서식 문자열(f)을 우선, 연도는 정수로
       if (c.type === 'number' && typeof cell.v === 'number' && /연도|year/i.test(headers[i])) return String(Math.round(cell.v))
+      if ((c.type === 'date' || c.type === 'datetime') && typeof cell.v === 'string') return normDate(cell.v) || cell.f || ''
       return cell.f ?? (cell.v === null ? '' : String(cell.v))
     }),
   )
-  // 헤더도 값도 없는 빈 열(시트의 남는 열)은 제외
   const keep = cols.map((c, i) => !!c.label || rows.some((r) => String(r[i]).trim()))
   return { headers: headers.filter((_, i) => keep[i]), rows: rows.map((r) => r.filter((_, i) => keep[i])) }
 }
 
-export async function fetchSheet(sheetUrl, sheetName) {
-  const ref = parseSheetUrl(sheetUrl)
-  if (!ref) throw new Error('Google Sheets 링크 형식이 올바르지 않아요.')
+async function fetchGviz(ref, sheetName) {
+  const q = new URLSearchParams({ tqx: 'out:json', headers: '1' })
+  if (sheetName) q.set('sheet', sheetName)
+  else if (ref.gid) q.set('gid', ref.gid)
   let res
   try {
-    res = await fetch(gvizUrl(ref, sheetName), { cache: 'no-store' })
+    res = await fetch(`https://docs.google.com/spreadsheets/d/${ref.id}/gviz/tq?${q}`, { cache: 'no-store' })
   } catch {
     throw new Error('시트를 불러오지 못했어요. 공유 설정(링크가 있는 모든 사용자)을 확인해 주세요.')
   }
   if (!res.ok) throw new Error(`시트를 불러오지 못했어요 (HTTP ${res.status}).`)
-  const { headers, rows } = parseGviz(await res.text())
-  return { headers, rows, papers: toPapers(headers, rows), roles: detectRoles(headers), fetchedAt: new Date() }
+  return parseGviz(await res.text())
 }
 
-/** 시트 URL이 없으면 샘플 데이터, 있으면 실시간으로 불러오기 */
-export function useSheetPapers(sheetUrl, sheetName) {
-  const [state, setState] = useState({ loading: !!sheetUrl, error: '', data: null })
+/* ── 2·3) 공식 Sheets API v4 (API Key / OAuth) ─────── */
+function fromValues(values = []) {
+  const [head = [], ...rest] = values
+  const width = Math.max(head.length, ...rest.map((r) => r.length))
+  const headers = Array.from({ length: width }, (_, i) => String(head[i] ?? '').trim() || `열 ${i + 1}`)
+  const rows = rest.filter((r) => r.some((v) => String(v).trim())).map((r) => headers.map((_, i) => String(r[i] ?? '')))
+  return { headers, rows }
+}
+
+const v4Url = (id, sheetName, extra = '') =>
+  `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(a1Range(sheetName))}?majorDimension=ROWS${extra}`
+
+async function v4Error(res) {
+  let msg = res.statusText
+  try {
+    msg = (await res.json()).error?.message || msg
+  } catch {
+    /* ignore */
+  }
+  if (res.status === 403 && /referer|referrer/i.test(msg)) return 'API Key의 HTTP 리퍼러 제한에 이 주소가 없어요. 보안 가이드대로 리퍼러를 등록해 주세요.'
+  if (res.status === 403) return `접근 거부: ${msg} (API Key라면 시트가 공개(링크 공유)인지, Sheets API가 허용됐는지 확인)`
+  if (res.status === 400 && /API key/i.test(msg)) return 'API Key가 올바르지 않아요.'
+  if (res.status === 404) return '시트를 찾을 수 없어요. 링크와 탭 이름을 확인해 주세요.'
+  return `Sheets API ${res.status}: ${msg}`
+}
+
+async function fetchApiKey(ref, sheetName, apiKey) {
+  if (!apiKey) throw new Error('API Key를 입력해 주세요.')
+  const res = await fetch(v4Url(ref.id, sheetName, `&key=${encodeURIComponent(apiKey)}`), { cache: 'no-store' })
+  if (!res.ok) throw new Error(await v4Error(res))
+  return fromValues((await res.json()).values)
+}
+
+async function fetchOAuth(ref, sheetName) {
+  try {
+    return fromValues((await gapi(v4Url(ref.id, sheetName))).values)
+  } catch (e) {
+    throw new Error(e.message.replace(/^Google API/, 'Sheets API'))
+  }
+}
+
+/**
+ * @param {{ mode, sheetUrl, sheetName, apiKey, columns }} cfg
+ */
+export async function fetchSheet(cfg) {
+  const ref = parseSheetUrl(cfg.sheetUrl)
+  if (!ref) throw new Error('Google Sheets 링크 형식이 올바르지 않아요. (docs.google.com/spreadsheets/d/…)')
+  const { headers, rows } =
+    cfg.mode === 'apikey'
+      ? await fetchApiKey(ref, cfg.sheetName, cfg.apiKey)
+      : cfg.mode === 'oauth'
+        ? await fetchOAuth(ref, cfg.sheetName)
+        : await fetchGviz(ref, cfg.sheetName)
+  return { headers, rows, papers: toPapers(headers, rows, cfg.columns), roles: detectRoles(headers, cfg.columns), fetchedAt: new Date() }
+}
+
+/** radar.json 설정 → 실시간 데이터 (연결 전에는 샘플) */
+export function useRadarPapers(cfg, ready = true) {
+  const { isAdmin } = useAdmin()
+  const g = useGoogle()
+  const mode = ready && cfg?.sheetUrl ? cfg.mode || 'gviz' : 'sample'
+  const canOAuth = isAdmin && g.connected && g.token?.sheets
+  const needsAuth = mode === 'oauth' && !canOAuth
+  const [state, setState] = useState({ loading: false, error: '', data: null })
   const [nonce, setNonce] = useState(0)
+  const key = JSON.stringify([mode, cfg?.sheetUrl, cfg?.sheetName, cfg?.apiKey, cfg?.columns, canOAuth])
+
   useEffect(() => {
-    if (!sheetUrl) {
+    if (mode === 'sample' || needsAuth) {
       setState({ loading: false, error: '', data: null })
       return
     }
     let alive = true
     setState((s) => ({ ...s, loading: true, error: '' }))
-    fetchSheet(sheetUrl, sheetName)
+    fetchSheet({ ...cfg, mode })
       .then((data) => alive && setState({ loading: false, error: '', data }))
       .catch((e) => alive && setState({ loading: false, error: e.message, data: null }))
     return () => {
       alive = false
     }
-  }, [sheetUrl, sheetName, nonce])
+  }, [key, nonce]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const sample = !sheetUrl
-  const data = sample ? SAMPLE : state.data
-  return { ...state, data, sample, reload: () => setNonce((n) => n + 1) }
+  const data = mode === 'sample' ? SAMPLE : state.data
+  return { ...state, mode, data, sample: mode === 'sample', needsAuth, isAdmin, reload: () => setNonce((n) => n + 1) }
 }
 
-// 시트 연결 전 보여 줄 샘플 (헤더 구조 예시이기도 함)
-const SAMPLE_HEADERS = ['제목', '저자', '저널/학회', '연도', '키워드/태그', '한줄요약', '링크', '읽음상태']
+/** 정렬된 목록 (최신 기록순 기본) */
+export function useSortedPapers(data, order = 'newest') {
+  return useMemo(() => sortPapers(data?.papers || [], order), [data, order])
+}
+
+/* ── 샘플: 시트에 위에서 아래로 기록해 온 순서 그대로 (맨 위 3행이 가장 오래된 초기 자료) ── */
+const SAMPLE_HEADERS = ['기록일', '제목', '저자', '저널/학회', '발행연도', '키워드/태그', '한줄요약', 'DOI/원문 링크', '중요도', '읽음상태']
 const SAMPLE_ROWS = [
+  // 초기 자료 3건 (가장 오래된 기록) → 정렬 후 목록 맨 아래
+  ['2026-11-01', 'Field Computation by Moment Methods', 'R. F. Harrington', 'Macmillan (Book)', '1968', 'Method of Moments', '모멘트법의 기본 틀을 정리한 교과서', '', '★★★', '읽음'],
   [
-    'Space-time-coding digital metasurfaces',
-    'L. Zhang, T. J. Cui et al.',
-    'Nature Communications',
-    '2018',
-    'Metasurface, Space-Time Modulation',
-    '시간·공간 코딩을 결합해 주파수와 방향을 동시에 제어하는 디지털 메타표면',
-    'https://doi.org/10.1038/s41467-018-06802-0',
-    '읽음',
-  ],
-  [
-    'Nonlocal metasurfaces for optical signal processing',
-    'H. Kwon, D. Sounas, A. Cordaro, A. Polman, A. Alù',
-    'Physical Review Letters',
-    '2018',
-    'Nonlocal, Metasurface',
-    '비국소 응답을 이용해 메타표면으로 미분·엣지 검출 같은 아날로그 연산 구현',
-    'https://doi.org/10.1103/PhysRevLett.121.173004',
-    '읽는 중',
-  ],
-  [
+    '2026-11-02',
     'Electromagnetic scattering by surfaces of arbitrary shape',
     'S. M. Rao, D. R. Wilton, A. W. Glisson',
     'IEEE Trans. Antennas Propag.',
     '1982',
     'Method of Moments, RWG',
-    'RWG 기저함수를 제안한 MoM 표면 적분방정식의 고전 논문',
-    'https://doi.org/10.1109/TAP.1982.1142818',
+    'RWG 기저함수를 제안한 표면 적분방정식 MoM의 고전',
+    '10.1109/TAP.1982.1142818',
+    '★★★',
     '읽음',
   ],
   [
-    'Field Computation by Moment Methods',
-    'R. F. Harrington',
-    'Macmillan (Book)',
-    '1968',
-    'Method of Moments',
-    '모멘트법의 기본 틀을 정리한 교과서',
-    '',
+    '2026-11-03',
+    'Light propagation with phase discontinuities: generalized laws of reflection and refraction',
+    'N. Yu, P. Genevet, M. A. Kats, F. Aieta, J.-P. Tetienne, F. Capasso, Z. Gaburro',
+    'Science',
+    '2011',
+    'Metasurface',
+    '위상 불연속면으로 일반화된 반사·굴절 법칙을 제시한 메타표면의 출발점',
+    '10.1126/science.1210713',
+    '★★',
+    '읽음',
+  ],
+  // 이후 기록
+  [
+    '2026-11-10',
+    'Coding metamaterials, digital metamaterials and programmable metamaterials',
+    'T. J. Cui, M. Q. Qi, X. Wan, J. Zhao, Q. Cheng',
+    'Light: Science & Applications',
+    '2014',
+    'Metasurface, Coding Metamaterial',
+    '0/1 코딩 단위로 전자기파를 디지털 제어하는 개념 제안',
+    '10.1038/lsa.2014.99',
+    '★★',
+    '읽음',
+  ],
+  [
+    '2026-11-24',
+    'Space-time-coding digital metasurfaces',
+    'L. Zhang et al. (T. J. Cui group)',
+    'Nature Communications',
+    '2018',
+    'Metasurface, Space-Time Modulation',
+    '시간·공간 코딩을 결합해 주파수와 방향을 동시에 제어',
+    '10.1038/s41467-018-06802-0',
+    '★★★',
+    '읽는 중',
+  ],
+  [
+    '2026-11-24',
+    'Nonlocal metasurfaces for optical signal processing',
+    'H. Kwon, D. Sounas, A. Cordaro, A. Polman, A. Alù',
+    'Physical Review Letters',
+    '2018',
+    'Nonlocal, Metasurface',
+    '비국소 응답으로 미분·엣지 검출 같은 아날로그 연산 구현',
+    '10.1103/PhysRevLett.121.173004',
+    '★★',
     '읽을 예정',
   ],
 ]

@@ -7,7 +7,7 @@ import { useSiteData } from '../lib/siteData.js'
 import { useEvents, eventsOn } from '../lib/useEvents.js'
 import { ymd } from '../lib/google.js'
 import { pubType, eventType, dday, safeUrl } from '../lib/labels.js'
-import { useSheetPapers } from '../lib/sheets.js'
+import { useRadarPapers, useSortedPapers } from '../lib/sheets.js'
 import { ProfileLinks } from './About.jsx'
 import { PubLinks } from './Publications.jsx'
 
@@ -229,25 +229,39 @@ function JournalWidget() {
   )
 }
 
-/* 3행 우: 논문 레이더 (Google Sheets 실시간) */
+/* 3행 우: 논문 레이더 (Google Sheets · 최신 기록순 상위 4건) */
 function RadarWidget() {
   const { data: radar, ready } = useSiteData('radar')
-  const sheet = useSheetPapers(ready ? radar?.sheetUrl || '' : '', radar?.sheetName || '')
-  const list = (sheet.data?.papers || []).slice(0, 4)
+  const sheet = useRadarPapers(radar, ready)
+  const list = useSortedPapers(sheet.data, 'newest').slice(0, 4)
   return (
     <Widget area="radar" title="논문 레이더" icon="radar" to="/radar">
       {sheet.sample && <p className="w-sample">샘플 데이터 · Google Sheets 연결 전</p>}
-      {sheet.error ? (
+      {sheet.needsAuth ? (
+        <p className="w-empty">비공개 시트와 연결되어 있어 관리자만 볼 수 있어요.</p>
+      ) : sheet.error ? (
         <p className="w-empty">{sheet.error}</p>
       ) : sheet.loading && !sheet.data ? (
         <div className="w-skel" />
       ) : list.length ? (
-        <ul className="w-papers">
+        <ol className="w-papers">
           {list.map((p) => (
             <li key={p.id}>
               <a href={p.link || undefined} target="_blank" rel="noreferrer" className={p.link ? '' : 'no-link'}>
-                <strong>{p.title}</strong>
-                <span className="w-paper-authors">{[p.venue, p.year].filter(Boolean).join(' · ')}</span>
+                <span className="w-paper-meta">
+                  <span className="date-badge">{p.date ? p.date.replace(/-/g, '.') : '날짜 없음'}</span>
+                  {p.important && <em className="hl-badge">★ 중요</em>}
+                </span>
+                <strong>
+                  {p.title}
+                  {p.link && <Icon name="external" size={12} />}
+                </strong>
+                {(p.venue || p.year) && (
+                  <span className="paper-venue">
+                    {p.venue && <span className="venue-badge">{p.venue}</span>}
+                    {p.year && <span className="year-badge">{p.year}</span>}
+                  </span>
+                )}
                 {p.tags.length > 0 && (
                   <span className="w-paper-tags">
                     {p.tags.slice(0, 3).map((t) => (
@@ -258,7 +272,7 @@ function RadarWidget() {
               </a>
             </li>
           ))}
-        </ul>
+        </ol>
       ) : (
         <p className="w-empty">시트에 논문이 없어요.</p>
       )}

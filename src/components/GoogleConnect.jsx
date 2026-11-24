@@ -3,10 +3,10 @@ import Modal from './Modal.jsx'
 import { Icon, toast } from './ui.jsx'
 import { useAdmin } from '../lib/admin.js'
 import { useGoogle, connect, disconnect, setClientId } from '../lib/google.js'
-import { GOOGLE_CLIENT_ID, GOOGLE_SCOPES, GOOGLE_ALLOWED_ORIGINS } from '../config.js'
+import { GOOGLE_CLIENT_ID, GOOGLE_SCOPES, GOOGLE_ALLOWED_ORIGINS, CALENDAR_SCOPE } from '../config.js'
 
-/** Google 연동 설정 + 보안 가이드 모달 */
-export function GoogleSettingsModal({ open, onClose }) {
+/** OAuth Client ID 입력칸 (공개 값 · 이 브라우저 설정으로 저장) — 캘린더/시트 설정에서 같이 사용 */
+export function ClientIdField() {
   const g = useGoogle()
   const [draft, setDraft] = useState('')
   const [error, setError] = useState('')
@@ -23,10 +23,51 @@ export function GoogleSettingsModal({ open, onClose }) {
     }
   }
 
+  return (
+    <section>
+      <h3>OAuth Client ID (공개용)</h3>
+      {GOOGLE_CLIENT_ID ? (
+        <p className="gs-mono">{GOOGLE_CLIENT_ID}</p>
+      ) : editing || !g.clientId ? (
+        <div className="gs-row">
+          <input
+            className="gs-input"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="123456789012-xxxx.apps.googleusercontent.com"
+            spellCheck={false}
+            aria-label="Google OAuth Client ID"
+          />
+          <button type="button" className="btn btn-sm btn-primary" onClick={saveId}>
+            저장
+          </button>
+        </div>
+      ) : (
+        <div className="gs-row">
+          <p className="gs-mono">{g.clientId}</p>
+          <button type="button" className="btn btn-sm btn-ghost" onClick={() => (setDraft(g.clientId), setEditing(true))}>
+            변경
+          </button>
+        </div>
+      )}
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
+  )
+}
+
+/** Google 연동 설정 + 보안 가이드 모달 */
+export function GoogleSettingsModal({ open, onClose }) {
+  const g = useGoogle()
+  const [error, setError] = useState('')
+
   const doConnect = async () => {
     setError('')
     try {
-      const t = await connect()
+      const t = await connect([CALENDAR_SCOPE])
       toast(t.calendar ? 'Google 캘린더를 연결했어요.' : 'Google 계정은 연결됐지만 캘린더 읽기 권한이 거부됐어요.', t.calendar ? 'default' : 'error')
       onClose()
     } catch (e) {
@@ -57,39 +98,13 @@ export function GoogleSettingsModal({ open, onClose }) {
             </button>
           )}
         </section>
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
 
-        <section>
-          <h3>OAuth Client ID (공개용)</h3>
-          {GOOGLE_CLIENT_ID ? (
-            <p className="gs-mono">{GOOGLE_CLIENT_ID}</p>
-          ) : editing || !g.clientId ? (
-            <div className="gs-row">
-              <input
-                className="gs-input"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder="123456789012-xxxx.apps.googleusercontent.com"
-                spellCheck={false}
-                aria-label="Google OAuth Client ID"
-              />
-              <button className="btn btn-sm btn-primary" onClick={saveId}>
-                저장
-              </button>
-            </div>
-          ) : (
-            <div className="gs-row">
-              <p className="gs-mono">{g.clientId}</p>
-              <button className="btn btn-sm btn-ghost" onClick={() => (setDraft(g.clientId), setEditing(true))}>
-                변경
-              </button>
-            </div>
-          )}
-          {error && (
-            <p className="form-error" role="alert">
-              {error}
-            </p>
-          )}
-        </section>
+        <ClientIdField />
 
         <section className="gs-guide" aria-label="보안 가이드">
           <h3>

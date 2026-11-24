@@ -1,13 +1,13 @@
 // Google Calendar 연동 (브라우저 전용 · Google Identity Services Token Client)
 // ─ 보안 설계 ─────────────────────────────────────────────────────────────
 // • 공개용 OAuth Client ID만 사용합니다. Client Secret은 쓰지도, 저장소에 두지도 않습니다.
-// • 권한은 읽기 전용 1개만 요청: calendar.readonly
+// • 권한은 필요한 기능에서만, 읽기 전용으로 따로 요청: calendar.readonly (캘린더) / spreadsheets.readonly (비공개 시트)
 // • Access Token은 메모리 + sessionStorage(탭을 닫으면 사라짐)에만 보관합니다.
 //   localStorage·IndexedDB·GitHub 저장소(JSON 커밋)에는 절대 기록하지 않습니다.
 // • 관리자 모드에서만 연결할 수 있고, 관리자 로그아웃 시 토큰을 즉시 폐기합니다.
 // ─────────────────────────────────────────────────────────────────────────
 import { useSyncExternalStore } from 'react'
-import { GOOGLE_CLIENT_ID, GOOGLE_SCOPES } from '../config.js'
+import { GOOGLE_CLIENT_ID, CALENDAR_SCOPE, SHEETS_SCOPE } from '../config.js'
 
 const TOKEN_KEY = 'google-access-token' // sessionStorage 전용
 const CLIENT_ID_KEY = 'google-client-id' // 공개 값(비밀 아님)이라 이 브라우저 설정으로 보관
@@ -84,7 +84,11 @@ function loadGis() {
 }
 
 /** Google 계정 연결 (팝업으로 동의 → Access Token 발급) */
-export async function connect() {
+/**
+ * Google 계정 연결 (팝업 동의 → Access Token 발급)
+ * @param {string[]} scopes 이번에 필요한 읽기 전용 권한. 이미 받은 권한은 유지(점진적 권한 요청)
+ */
+export async function connect(scopes = [CALENDAR_SCOPE]) {
   const clientId = getClientId()
   if (!clientId) throw new Error('먼저 Google OAuth Client ID를 입력해 주세요.')
   setState({ connecting: true, error: null })
@@ -93,18 +97,20 @@ export async function connect() {
     const resp = await new Promise((resolve, reject) => {
       const client = window.google.accounts.oauth2.initTokenClient({
         client_id: clientId,
-        scope: GOOGLE_SCOPES.join(' '),
-        include_granted_scopes: false,
+        scope: [...new Set([...(state.token?.scopes || []), ...scopes])].join(' '),
+        include_granted_scopes: true,
         callback: (r) => (r.error ? reject(new Error(r.error_description || r.error)) : resolve(r)),
         error_callback: (e) => reject(new Error(e?.type === 'popup_closed' ? '로그인 창이 닫혔어요.' : e?.message || 'Google 로그인에 실패했어요.')),
       })
       client.requestAccessToken({ prompt: '' })
     })
-    const granted = (resp.scope || '').split(' ')
+    const granted = (resp.scope || '').split(' ').filter(Boolean)
     const token = {
       accessToken: resp.access_token,
       expiresAt: Date.now() + (Number(resp.expires_in) || 3600) * 1000,
-      calendar: granted.includes(GOOGLE_SCOPES[0]),
+      scopes: granted,
+      calendar: granted.includes(CALENDAR_SCOPE),
+      sheets: granted.includes(SHEETS_SCOPE),
     }
     try {
       sessionStorage.setItem(TOKEN_KEY, JSON.stringify(token))
@@ -137,7 +143,7 @@ export function disconnect() {
   if (state.token || state.error) setState({ token: null, error: null })
 }
 
-async function gapi(url) {
+export async function gapi(url) {
   const t = state.token
   if (!t || t.expiresAt < Date.now()) {
     disconnect()
