@@ -1,10 +1,10 @@
 {
-  "updatedAt": "2026-11-24T08:54:10.000Z",
+  "updatedAt": "2026-11-24T09:01:26.591Z",
   "items": [
     {
       "id": "pub-mwugjjslq3r",
       "type": "conference",
-      "year": 2026,
+      "year": 2025,
       "title": "상호결합을 고려한 공진기 기반 투과형 메타표면 안테나",
       "authors": "조민우, 김민석",
       "venue": "2025년 한국전자파학회 제37차 정기총회 및 추계학술대회",
@@ -13,7 +13,8 @@
       "pdf": "",
       "code": "",
       "url": "",
-      "highlight": false
+      "highlight": false,
+      "month": 11
     },
     {
       "id": "pub-mwug26hvhmx",
