@@ -472,3 +472,32 @@
     overflow: visible;
   }
 }
+
+/* 홈 위젯: 최신 날짜 1개 그룹 · 하단 「더 보기」를 바닥에 붙여 옆 위젯과 높이 균형 */
+.w-radar .w-paper-groups {
+  flex: 1;
+}
+.w-radar-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: auto;
+  padding: 11px;
+  border-radius: 14px;
+  background: var(--fill);
+  color: var(--g600);
+  font-size: 0.88rem;
+  font-weight: 700;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.w-radar-more:hover {
+  background: var(--blue-weak);
+  color: var(--blue-weak-text);
+}
+.w-radar .w-papers + .w-radar-more,
+.w-paper-group + .w-radar-more {
+  margin-top: auto;
+}

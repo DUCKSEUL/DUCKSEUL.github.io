@@ -233,22 +233,26 @@ function JournalWidget() {
 function RadarWidget() {
   const { data: radar, ready } = useSiteData('radar')
   const sheet = useRadarPapers(radar, ready)
-  const list = useSortedPapers(sheet.data, 'newest').slice(0, 4)
-  const groups = groupByDate(list)
+  const sorted = useSortedPapers(sheet.data, 'newest')
+  // 홈에서는 가장 최근 기록일 1개 그룹의 논문 최대 3편만 (이전 날짜는 「전체 보기」에서)
+  const latest = groupByDate(sorted)[0]
+  const list = latest ? latest.papers.slice(0, 3) : []
+  const groups = latest ? [{ date: latest.date, papers: list, total: latest.papers.length }] : []
+  const olderCount = sorted.length - list.length
   return (
-    <Widget area="radar" title="논문 레이더" icon="radar" to="/radar">
+    <Widget area="radar" title="논문 레이더" icon="radar" to="/radar" className="w-radar">
       {sheet.sample && <p className="w-sample">샘플 데이터 · Google Sheets 연결 전</p>}
       {sheet.loading && !sheet.data ? (
         <div className="w-skel" />
       ) : !sheet.data ? (
         <p className="w-empty">{sheet.isAdmin && sheet.error ? sheet.error : '논문 목록을 준비하고 있어요.'}</p>
-      ) : list.length ? (
+      ) : list.length > 0 ? (
         <div className="w-paper-groups">
           {groups.map((g) => (
             <section key={g.date || 'none'} className="w-paper-group">
               <h3 className="w-date-head">
                 <time dateTime={g.date || undefined}>{fmtGroupDate(g.date)}</time>
-                <span>{g.papers.length}편</span>
+                <span>{g.total}편</span>
               </h3>
               <ol className="w-papers">
                 {g.papers.map((p) => (
@@ -257,6 +261,11 @@ function RadarWidget() {
               </ol>
             </section>
           ))}
+          {olderCount > 0 ? (
+            <Link to="/radar" className="w-radar-more">
+              이전 기록 포함 {olderCount}편 더 보기 <Icon name="chevron" size={14} />
+            </Link>
+          ) : null}
         </div>
       ) : (
         <p className="w-empty">시트에 논문이 없어요.</p>

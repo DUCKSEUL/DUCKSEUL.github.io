@@ -116,7 +116,8 @@ export default function About() {
   if (!ready) return <div className="page" />
   if (!a) return <section className="page container narrow">내 소개를 불러오지 못했어요.</section>
 
-  const showEmpty = (arr) => isAdmin || arr?.length
+  // 항상 boolean 반환 (빈 배열의 length 0이 JSX에 「0」으로 찍히지 않도록)
+  const showEmpty = (arr) => isAdmin || (Array.isArray(arr) && arr.length > 0)
 
   return (
     <section className="page about">
@@ -155,7 +156,7 @@ export default function About() {
             <h2 className="card-title">
               <Icon name="cap" size={20} /> 학력
             </h2>
-            {a.education?.length ? (
+            {a.education?.length > 0 ? (
               <ol className="timeline">
                 {a.education.map((e, i) => (
                   <li key={i}>
