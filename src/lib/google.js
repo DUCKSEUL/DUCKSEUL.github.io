@@ -100,7 +100,16 @@ export async function connect(scopes = [CALENDAR_SCOPE]) {
         scope: [...new Set([...(state.token?.scopes || []), ...scopes])].join(' '),
         include_granted_scopes: true,
         callback: (r) => (r.error ? reject(new Error(r.error_description || r.error)) : resolve(r)),
-        error_callback: (e) => reject(new Error(e?.type === 'popup_closed' ? '로그인 창이 닫혔어요.' : e?.message || 'Google 로그인에 실패했어요.')),
+        error_callback: (e) =>
+          reject(
+            new Error(
+              e?.type === 'popup_closed'
+                ? '로그인 창이 닫혔어요. Google 창에 「승인 오류 · no registered origin」이 보였다면, Cloud Console에서 이 Client ID의 「승인된 JavaScript 원본」에 ' + location.origin + ' 이 등록·저장됐는지 확인해 주세요. (반영까지 몇 분 걸릴 수 있어요)'
+                : e?.type === 'popup_failed_to_open'
+                  ? '팝업이 차단됐어요. 브라우저 주소창의 팝업 차단을 해제하고 다시 시도해 주세요.'
+                  : e?.message || 'Google 로그인에 실패했어요.',
+            ),
+          ),
       })
       client.requestAccessToken({ prompt: '' })
     })
