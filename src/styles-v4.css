@@ -914,3 +914,29 @@
   bottom: 0.2em;
   line-height: 1;
 }
+
+/* ↵ 표시 조건 (v8)
+ * - 엔터로 넘긴 문단 끝에만: 문서의 마지막 블록(아직 엔터를 치지 않은 현재 줄)에는 숨김
+ * - 강제 줄바꿈(Shift+Enter) 지점에는 .hb-mark로 표시 */
+.editor-content > :last-child::after,
+.editor-content > :is(ul, ol, blockquote):last-child > :last-child > p:last-child::after,
+.editor-content > :is(ul, ol):last-child > li:last-child > p:last-child::after,
+.editor-content > blockquote:last-child > p:last-child::after {
+  content: none;
+}
+.editor-content .hb-mark::before {
+  content: '\21B5';
+  color: #9ca3af;
+  font-size: 0.9em;
+  font-weight: 400;
+  font-style: normal;
+  text-decoration: none;
+  pointer-events: none;
+  user-select: none;
+}
+/* 기호를 숨긴 마지막 빈 줄은 원래의 자리표시 <br>이 줄 높이를 잡도록 */
+.editor-content > p:last-child:has(> br.ProseMirror-trailingBreak:only-child) > br.ProseMirror-trailingBreak,
+.editor-content > :is(ul, ol):last-child > li:last-child > p:last-child:has(> br.ProseMirror-trailingBreak:only-child) > br.ProseMirror-trailingBreak,
+.editor-content > blockquote:last-child > p:last-child:has(> br.ProseMirror-trailingBreak:only-child) > br.ProseMirror-trailingBreak {
+  display: inline;
+}

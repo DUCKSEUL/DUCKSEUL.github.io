@@ -4,6 +4,7 @@ import StarterKit from '@tiptap/starter-kit'
 import { TextStyleKit } from '@tiptap/extension-text-style'
 import TextAlign from '@tiptap/extension-text-align'
 import HorizontalRule from '@tiptap/extension-horizontal-rule'
+import HardBreak from '@tiptap/extension-hard-break'
 import { TableKit, TableCell, TableHeader } from '@tiptap/extension-table'
 import Placeholder from '@tiptap/extension-placeholder'
 import MathView from './MathView.jsx'
@@ -209,6 +210,24 @@ export const Figure = Node.create({
   },
 })
 
+/* ── 강제 줄바꿈(Shift+Enter): 에디터 화면에만 ↵ 표시 ──
+ * 노드 뷰는 편집 화면에만 쓰이고, 저장 HTML(getHTML)은 renderHTML의 <br> 그대로라
+ * 상세 보기·네이버 복사에는 기호가 들어가지 않습니다. */
+export const MarkedHardBreak = HardBreak.extend({
+  addNodeView() {
+    return () => {
+      const dom = document.createElement('span')
+      dom.className = 'hb-node'
+      const mark = document.createElement('span')
+      mark.className = 'hb-mark'
+      mark.setAttribute('contenteditable', 'false')
+      mark.setAttribute('aria-hidden', 'true')
+      dom.append(mark, document.createElement('br'))
+      return { dom, ignoreMutation: () => true }
+    }
+  },
+})
+
 /* ── 네이버 스타일 구분선 ────────────────────── */
 /** 구분선 삽입 + 바로 아래 새 문단으로 커서 이동. 새 문단은 직전 문단의 정렬·줄간격을 이어받음 */
 export function insertDividerKeepAlign(editor, variant = 'line') {
@@ -363,11 +382,13 @@ export function buildExtensions({ onEditMath }) {
       heading: { levels: [2, 3, 4] },
       horizontalRule: false,
       code: false, // Ctrl+E를 가운데 정렬로 쓰기 위해 인라인 코드 단축키 비활성화
+      hardBreak: false, // ↵ 표시용 MarkedHardBreak로 대체
       link: { openOnClick: false, autolink: true, defaultProtocol: 'https' },
     }),
     TextStyleKit.configure({ lineHeight: false }),
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
     LineHeight,
+    MarkedHardBreak,
     Divider,
     Figure,
     TableKit.configure({ table: { resizable: false }, tableCell: false, tableHeader: false }),
