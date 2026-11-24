@@ -1,20 +1,6 @@
 {
-  "updatedAt": "2026-11-24T08:05:35.875Z",
+  "updatedAt": "2026-11-24T08:05:48.532Z",
   "items": [
-    {
-      "id": "pj-iemom",
-      "type": "project",
-      "title": "3D IE-MoM Solver",
-      "authors": "DUCKSEUL",
-      "venue": "MATLAB",
-      "year": 2026,
-      "description": "3차원 적분방정식 기반 모멘트법 솔버 구현",
-      "doi": "",
-      "pdf": "",
-      "code": "https://github.com/DUCKSEUL/261026_3D_IE_MoM_by_Claude",
-      "url": "",
-      "highlight": true
-    },
     {
       "id": "pj-edbf",
       "type": "project",
