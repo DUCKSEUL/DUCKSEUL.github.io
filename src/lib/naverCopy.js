@@ -251,7 +251,9 @@ export async function buildNaverHtml(container) {
     const px = Math.round(740 * (Number.isFinite(pct) && img.style.width.endsWith('%') ? pct / 100 : 1))
     img.removeAttribute('height')
     img.setAttribute('width', String(px))
-    img.setAttribute('style', `width:${px}px;max-width:100%;height:auto;border:0`)
+    const inline = img.getAttribute('data-type') === 'figure' && img.parentElement?.tagName === 'P'
+    img.removeAttribute('data-type')
+    img.setAttribute('style', `width:${px}px;max-width:100%;height:auto;border:0${inline ? ';display:inline-block;vertical-align:middle;margin:4px 2px' : ''}`)
     if (img.parentElement === clone || img.parentElement?.classList.contains('img-node')) {
       const p = document.createElement('p')
       p.setAttribute('style', 'text-align:center;margin:16px 0')

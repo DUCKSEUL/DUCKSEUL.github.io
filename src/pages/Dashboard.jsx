@@ -10,6 +10,7 @@ import { pubType, eventType, dday, safeUrl } from '../lib/labels.js'
 import { useRadarPapers, useSortedPapers, groupByDate, fmtGroupDate, BANDS } from '../lib/sheets.js'
 import { ProfileLinks } from './About.jsx'
 import { PubLinks } from './Publications.jsx'
+import GitHubContrib from '../components/GitHubContrib.jsx'
 
 function Widget({ area, title, icon, to, children, className = '' }) {
   return (
@@ -327,6 +328,7 @@ export default function Dashboard() {
           <CalendarWidget />
           <JournalWidget />
           <RadarWidget />
+          <GitHubContrib />
         </div>
       </div>
     </div>

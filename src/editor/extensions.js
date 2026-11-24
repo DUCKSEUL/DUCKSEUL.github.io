@@ -7,7 +7,6 @@ import HorizontalRule from '@tiptap/extension-horizontal-rule'
 import { TableKit, TableCell, TableHeader } from '@tiptap/extension-table'
 import Placeholder from '@tiptap/extension-placeholder'
 import MathView from './MathView.jsx'
-import ImageView from './ImageView.jsx'
 
 /* ── 수식 (인라인 / 블록) ───────────────────── */
 function mathNode(name, inline) {
@@ -51,19 +50,47 @@ function mathNode(name, inline) {
 export const MathInline = mathNode('mathInline', true)
 export const MathBlock = mathNode('mathBlock', false)
 
-/* ── 사진 (크기 · 캡션 · 테두리) ─────────────── */
+/* ── 사진 (인라인 블록 · 크기 조절) ─────────────
+ * 사진은 문단 안의 인라인 노드라서 문단 정렬(text-align)을 그대로 따르고,
+ * Alt+1(½) / Alt+2(⅓)로 줄이면 한 줄에 2~3장이 나란히 놓입니다.
+ * 저장 형식: <img data-type="figure" src=".." style="width: 49%"> */
 const imgOf = (el) => (el.tagName === 'IMG' ? el : el.querySelector('img'))
+const HANDLES = ['tl', 'tr', 'bl', 'br']
+
+/** 예전 블록형 <figure>를 가운데 정렬 문단 안의 인라인 사진으로 변환 (에디터에 불러올 때) */
+export function upgradeLegacyFigures(html = '') {
+  if (!html.includes('<figure')) return html
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html')
+  doc.body.querySelectorAll('figure[data-type="figure"]').forEach((fig) => {
+    const img = fig.querySelector('img')
+    if (!img) return fig.remove()
+    const out = doc.createElement('img')
+    out.setAttribute('src', img.getAttribute('src') || '')
+    out.setAttribute('alt', img.getAttribute('alt') || fig.querySelector('figcaption')?.textContent || '')
+    out.setAttribute('data-type', 'figure')
+    if (fig.style.width) out.style.width = fig.style.width
+    const p = doc.createElement('p')
+    p.style.textAlign = 'center'
+    p.appendChild(out)
+    fig.replaceWith(p)
+  })
+  return doc.body.innerHTML
+}
 
 export const Figure = Node.create({
   name: 'image',
-  group: 'block',
+  group: 'inline',
+  inline: true,
   atom: true,
   draggable: true,
   selectable: true,
   addAttributes() {
     return {
       src: { default: null, parseHTML: (el) => imgOf(el)?.getAttribute('src') },
-      alt: { default: '', parseHTML: (el) => imgOf(el)?.getAttribute('alt') || '' },
+      alt: {
+        default: '',
+        parseHTML: (el) => imgOf(el)?.getAttribute('alt') || (el.tagName === 'FIGURE' ? el.querySelector('figcaption')?.textContent || '' : ''),
+      },
       width: {
         default: null,
         parseHTML: (el) => {
@@ -71,34 +98,152 @@ export const Figure = Node.create({
           return el.style.width || img?.style.width || (img?.getAttribute('width') ? `${img.getAttribute('width')}px` : null)
         },
       },
-      caption: { default: '', parseHTML: (el) => (el.tagName === 'FIGURE' ? el.querySelector('figcaption')?.textContent || '' : '') },
-      border: { default: false, parseHTML: (el) => el.getAttribute('data-border') === 'true' },
     }
   },
   parseHTML() {
     return [{ tag: 'figure[data-type="figure"]' }, { tag: 'img[src]' }]
   },
   renderHTML({ node }) {
-    const { src, alt, width, caption, border } = node.attrs
-    const attrs = { 'data-type': 'figure' }
-    if (border) attrs['data-border'] = 'true'
+    const { src, alt, width } = node.attrs
+    const attrs = { 'data-type': 'figure', src, alt: alt || '' }
     if (width) attrs.style = `width: ${width}`
-    const out = ['figure', attrs, ['img', { src, alt: alt || caption || '' }]]
-    if (caption) out.push(['figcaption', {}, caption])
-    return out
+    return ['img', attrs]
   },
-  renderText({ node }) {
-    return node.attrs.caption ? `[사진: ${node.attrs.caption}]` : '[사진]'
+  renderText() {
+    return '[사진]'
   },
   addNodeView() {
-    return ReactNodeViewRenderer(ImageView, {
-      // 캡션 입력란 / 옵션 버튼의 이벤트는 에디터가 가로채지 않도록
-      stopEvent: ({ event }) => !!event.target?.closest?.('.img-cap-input, .img-opts'),
-    })
+    return ({ node: initial, editor, getPos }) => {
+      let node = initial
+      const dom = document.createElement('span')
+      dom.className = 'img-node'
+      dom.setAttribute('data-drag-handle', '')
+      const img = document.createElement('img')
+      img.draggable = false
+      dom.appendChild(img)
+      let extras = []
+
+      const apply = () => {
+        if (img.getAttribute('src') !== node.attrs.src) img.setAttribute('src', node.attrs.src || '')
+        img.alt = node.attrs.alt || ''
+        dom.style.width = node.attrs.width || ''
+      }
+      apply()
+
+      const label = (pct) => (pct != null ? `${Math.round(pct)}%` : node.attrs.width || '원본 크기')
+      const startDrag = (e, dir) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const para = dom.parentElement
+        const container = para.getBoundingClientRect().width
+        const startW = dom.getBoundingClientRect().width
+        const startX = e.clientX
+        const sign = dir.endsWith('l') ? -1 : 1
+        // 가운데 정렬 문단에서는 한쪽을 당기면 양쪽으로 늘어남 → 이동량 ×2
+        const factor = getComputedStyle(para).textAlign === 'center' ? 2 : 1
+        let pct = (startW / container) * 100
+        const size = dom.querySelector('.img-size')
+        const move = (ev) => {
+          const next = Math.max(48, Math.min(container, startW + (ev.clientX - startX) * sign * factor))
+          pct = (next / container) * 100
+          dom.style.width = `${pct}%`
+          if (size) size.textContent = `${label(pct)} · Alt+1 ½ · Alt+2 ⅓`
+        }
+        const up = () => {
+          window.removeEventListener('pointermove', move)
+          window.removeEventListener('pointerup', up)
+          const pos = getPos()
+          if (typeof pos !== 'number') return
+          const width = `${Math.round(Math.min(100, pct) * 10) / 10}%`
+          editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, width }))
+        }
+        window.addEventListener('pointermove', move)
+        window.addEventListener('pointerup', up)
+      }
+
+      const showHandles = () => {
+        if (!editor.isEditable || extras.length) return
+        for (const d of HANDLES) {
+          const h = document.createElement('span')
+          h.className = `img-handle ${d}`
+          h.setAttribute('aria-label', '크기 조절')
+          h.addEventListener('pointerdown', (e) => startDrag(e, d))
+          extras.push(h)
+        }
+        const size = document.createElement('span')
+        size.className = 'img-size'
+        size.textContent = `${label()} · Alt+1 ½ · Alt+2 ⅓`
+        extras.push(size)
+        extras.forEach((x) => dom.appendChild(x))
+      }
+      const hideHandles = () => {
+        extras.forEach((x) => x.remove())
+        extras = []
+      }
+
+      return {
+        dom,
+        update(next) {
+          if (next.type !== node.type) return false
+          node = next
+          apply()
+          if (extras.length) {
+            hideHandles()
+            showHandles()
+          }
+          return true
+        },
+        selectNode() {
+          dom.classList.add('is-selected')
+          showHandles()
+        },
+        deselectNode() {
+          dom.classList.remove('is-selected')
+          hideHandles()
+        },
+        stopEvent: (e) => !!e.target?.classList?.contains('img-handle'),
+        ignoreMutation: () => true,
+        destroy: hideHandles,
+      }
+    }
   },
 })
 
 /* ── 네이버 스타일 구분선 ────────────────────── */
+/** 구분선 삽입 + 바로 아래 새 문단으로 커서 이동. 새 문단은 직전 문단의 정렬·줄간격을 이어받음 */
+export function insertDividerKeepAlign(editor, variant = 'line') {
+  const { $from, empty } = editor.state.selection
+  const block = $from.parent
+  const keep = {}
+  if (block.isTextblock) {
+    if (block.attrs.textAlign) keep.textAlign = block.attrs.textAlign
+    if (block.attrs.lineHeight) keep.lineHeight = block.attrs.lineHeight
+  }
+  const atEnd = empty && block.isTextblock && $from.parentOffset === block.content.size
+  const isEmpty = block.isTextblock && block.content.size === 0
+  const hr = { type: 'horizontalRule', attrs: { variant } }
+  if (isEmpty) {
+    // 빈 문단: 그 자리에 구분선, 아래에 같은 정렬의 빈 문단
+    const pos = $from.before()
+    return editor
+      .chain()
+      .focus()
+      .insertContentAt({ from: pos, to: pos + block.nodeSize }, [hr, { type: 'paragraph', attrs: keep }])
+      .run()
+  }
+  if (atEnd) {
+    const pos = $from.after()
+    return editor
+      .chain()
+      .focus()
+      .insertContentAt(pos, [hr, { type: 'paragraph', attrs: keep }])
+      .setTextSelection(pos + 2)
+      .run()
+  }
+  // 문단 중간: 문단을 나누고 그 사이에 구분선 (뒷부분은 원래 문단 속성 유지)
+  return editor.chain().focus().setHorizontalRule().run()
+}
+
 export const DIVIDERS = [
   { value: 'line', label: '기본 실선' },
   { value: 'bold', label: '굵은 실선' },
@@ -116,7 +261,7 @@ export const Divider = HorizontalRule.extend({
       'Mod-Enter': () => {
         const ed = this.editor
         if (ed.isActive('codeBlock')) return false // 코드 블록에서는 기존 동작(블록 빠져나오기)
-        return ed.chain().setHorizontalRule().run()
+        return insertDividerKeepAlign(ed, 'line')
       },
     }
   },

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Icon, toast, useDocumentTitle } from '../components/ui.jsx'
 import PostListItem from '../components/PostListItem.jsx'
@@ -12,6 +12,57 @@ import { profile } from '../data/profile.js'
 import { JOURNAL_CATS as DEFAULT_CATS } from '../lib/labels.js'
 
 const ALL = '전체'
+const PAGE_SIZE = 10
+const NOTE_CAT = '연구 노트'
+const byTitleDesc = (a, b) => (b.title || '').localeCompare(a.title || '', undefined, { numeric: true, sensitivity: 'base' })
+
+/** 「연구 노트」 글은 제목 앞 날짜 코드(260922 …) 기준 내림차순.
+ *  다른 카테고리 글은 작성일 순서 그대로 두고, 연구 노트가 차지하던 자리끼리만 다시 채움 */
+function sortForList(list, catOf) {
+  const notes = list.filter((p) => catOf(p) === NOTE_CAT).sort(byTitleDesc)
+  let i = 0
+  return list.map((p) => (catOf(p) === NOTE_CAT ? notes[i++] : p))
+}
+
+/** 1 2 3 4 … 10 형태의 페이지 번호 목록 */
+function pageItems(cur, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const set = new Set([1, total, cur - 1, cur, cur + 1])
+  if (cur <= 4) [2, 3, 4, 5].forEach((n) => set.add(n))
+  if (cur >= total - 3) [total - 4, total - 3, total - 2, total - 1].forEach((n) => set.add(n))
+  const nums = [...set].filter((n) => n >= 1 && n <= total).sort((a, b) => a - b)
+  const out = []
+  nums.forEach((n, k) => {
+    if (k && n - nums[k - 1] > 1) out.push(`gap-${n}`)
+    out.push(n)
+  })
+  return out
+}
+
+function Pager({ page, total, onGo }) {
+  if (total <= 1) return null
+  return (
+    <nav className="pager" aria-label="페이지">
+      <button onClick={() => onGo(page - 1)} disabled={page <= 1} aria-label="이전 페이지">
+        <Icon name="chevronLeft" size={16} />
+      </button>
+      {pageItems(page, total).map((n) =>
+        typeof n === 'number' ? (
+          <button key={n} className={n === page ? 'is-current' : ''} aria-current={n === page ? 'page' : undefined} onClick={() => onGo(n)}>
+            {n}
+          </button>
+        ) : (
+          <span key={n} className="pager-gap" aria-hidden>
+            …
+          </span>
+        ),
+      )}
+      <button onClick={() => onGo(page + 1)} disabled={page >= total} aria-label="다음 페이지">
+        <Icon name="chevron" size={16} />
+      </button>
+    </nav>
+  )
+}
 
 const io = () => import('../lib/exportImport.js')
 
@@ -34,7 +85,31 @@ export default function JournalList() {
   const needle = q.trim().toLowerCase()
   const texts = useMemo(() => new Map(posts.map((p) => [p.id, [p.title, catOf(p), (p.tags || []).join(' '), postText(p.html || '')].join(' ').toLowerCase()])), [posts])
   const matched = needle ? posts.filter((p) => needle.split(/\s+/).every((w) => texts.get(p.id)?.includes(w))) : posts
-  const list = cat === ALL ? matched : matched.filter((p) => catOf(p) === cat)
+  const filtered = cat === ALL ? matched : matched.filter((p) => catOf(p) === cat)
+  const sorted = useMemo(() => sortForList(filtered, catOf), [filtered]) // eslint-disable-line react-hooks/exhaustive-deps
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
+  const page = Math.min(totalPages, Math.max(1, parseInt(params.get('page') || '1', 10) || 1))
+  const list = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const goPage = (n) => {
+    const next = new URLSearchParams(params)
+    if (n <= 1) next.delete('page')
+    else next.set('page', String(n))
+    setParams(next)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  // 검색어가 바뀌면 1페이지로
+  const firstQ = useRef(true)
+  useEffect(() => {
+    if (firstQ.current) {
+      firstQ.current = false
+      return
+    }
+    if (params.get('page')) {
+      const next = new URLSearchParams(params)
+      next.delete('page')
+      setParams(next, { replace: true })
+    }
+  }, [q]) // eslint-disable-line react-hooks/exhaustive-deps
   const syncingCount = posts.filter((p) => p.source === 'syncing').length
 
   const publishAll = async () => {
@@ -127,7 +202,7 @@ export default function JournalList() {
           </nav>
           {needle && (
             <p className="radar-count">
-              「{q.trim()}」 검색 결과 {list.length}개
+              「{q.trim()}」 검색 결과 {sorted.length}개
               <button className="link-btn" onClick={() => setQ('')}>
                 검색 지우기
               </button>
@@ -141,6 +216,9 @@ export default function JournalList() {
               <PostListItem key={p.id} post={p} onDelete={isAdmin ? setToDelete : undefined} />
             ))}
           </div>
+        ) : null}
+        {list.length ? (
+          <Pager page={page} total={totalPages} onGo={goPage} />
         ) : (
           <div className="empty">
             <p>{needle ? '검색 결과가 없어요.' : cat !== ALL ? `「${cat}」 카테고리에 아직 글이 없어요.` : '아직 글이 없어요.'}</p>

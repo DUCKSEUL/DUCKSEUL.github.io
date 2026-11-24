@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../components/ui.jsx'
-import { DEFAULT_LINE_HEIGHT, DEFAULT_SIZE, DIVIDERS, FONT_FAMILIES, FONT_SIZES, LINE_HEIGHTS } from './extensions.js'
+import { DEFAULT_LINE_HEIGHT, DEFAULT_SIZE, DIVIDERS, FONT_FAMILIES, FONT_SIZES, LINE_HEIGHTS, insertDividerKeepAlign } from './extensions.js'
 
 const COLORS = [
   '#000000', '#333d4b', '#6b7684', '#b0b8c1', '#ffffff',
@@ -193,11 +193,7 @@ export function stepFontSize(editor, dir) {
 }
 
 export function insertDivider(editor, variant) {
-  editor
-    .chain()
-    .focus()
-    .insertContent([{ type: 'horizontalRule', attrs: { variant } }, { type: 'paragraph' }])
-    .run()
+  insertDividerKeepAlign(editor, variant)
 }
 
 export default function Toolbar({ editor, onMath, onLink, onImage }) {

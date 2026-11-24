@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useBlocker, useNavigate, useParams } from 'react-router-dom'
 import { EditorContent, useEditor } from '@tiptap/react'
-import { NodeSelection } from '@tiptap/pm/state'
-import { buildExtensions } from '../editor/extensions.js'
+import { NodeSelection, Selection } from '@tiptap/pm/state'
+import { buildExtensions, upgradeLegacyFigures } from '../editor/extensions.js'
 import Toolbar from '../editor/Toolbar.jsx'
 import MathPopover from '../editor/MathPopover.jsx'
 import TableToolbar from '../editor/TableToolbar.jsx'
@@ -111,7 +111,7 @@ function EditorPage({ initial, categories }) {
 
   const editor = useEditor({
     extensions,
-    content: initial?.html || '',
+    content: upgradeLegacyFigures(initial?.html || ''),
     shouldRerenderOnTransaction: true,
     editorProps: {
       attributes: { class: 'prose editor-content', spellcheck: 'false' },
@@ -156,7 +156,7 @@ function EditorPage({ initial, categories }) {
 
   const restore = () => {
     const d = recovery
-    editorRef.current?.commands.setContent(d.html || '')
+    editorRef.current?.commands.setContent(upgradeLegacyFigures(d.html || ''))
     setTitle(d.title || '')
     setCategory(d.category || '연구 노트')
     setTags(d.tags || '')
@@ -259,7 +259,8 @@ function EditorPage({ initial, categories }) {
         if (sel instanceof NodeSelection && sel.node.type.name === 'image') {
           e.preventDefault()
           e.stopPropagation()
-          ed.chain().updateAttributes('image', { width: e.code === 'Digit1' ? '50%' : '33.3%' }).run()
+          // 좌우 여백(0.5%씩) 포함 ½ = 50%, ⅓ = 33.3% → 한 줄에 2장 / 3장
+          ed.chain().updateAttributes('image', { width: e.code === 'Digit1' ? '49%' : '32.3%' }).run()
         }
       }
     }
@@ -455,6 +456,42 @@ function EditorPage({ initial, categories }) {
 
   const counts = countChars(editor)
 
+  // 문서 용지의 좌우 여백 클릭: 그 높이의 줄(사진이면 사진 바로 앞/뒤)에 커서를 놓음
+  const onPaperMouseDown = (e) => {
+    const ed = editorRef.current
+    if (!ed || e.button !== 0 || e.target.closest('.ProseMirror, input, textarea, button, a')) return
+    const view = ed.view
+    const r = view.dom.getBoundingClientRect()
+    if (e.clientY < r.top || e.clientY > r.bottom) return
+    if (e.clientX >= r.left && e.clientX <= r.right) return
+    const left = e.clientX < r.left
+    const x = left ? r.left + 2 : r.right - 2
+    const hit = view.posAtCoords({ left: x, top: e.clientY })
+    if (!hit) return
+    e.preventDefault()
+    let pos = hit.pos
+    // 그 높이에 걸친 사진들 중 가장 왼쪽/오른쪽 사진의 바로 앞/뒤
+    const rowImgs = [...view.dom.querySelectorAll('.img-node')]
+      .map((el) => ({ el, r: el.getBoundingClientRect() }))
+      .filter(({ r }) => e.clientY >= r.top && e.clientY <= r.bottom)
+      .sort((a, b) => a.r.left - b.r.left)
+    const edgeImg = left ? rowImgs[0] : rowImgs[rowImgs.length - 1]
+    let imgPos = null
+    if (edgeImg) {
+      const p = view.posAtDOM(edgeImg.el, 0)
+      imgPos = [p, p - 1].find((q) => q >= 0 && ed.state.doc.nodeAt(q)?.type.name === 'image') ?? null
+    }
+    if (imgPos != null) pos = left ? imgPos : imgPos + 1
+    else {
+      // 해당 줄의 가장 가까운 끝(왼쪽 클릭 → 줄 시작, 오른쪽 → 줄 끝)
+      const edge = view.posAtCoords({ left: left ? r.left + 1 : r.right - 1, top: e.clientY })
+      if (edge) pos = edge.pos
+    }
+    const sel = Selection.near(ed.state.doc.resolve(Math.min(pos, ed.state.doc.content.size)), left ? 1 : -1)
+    view.dispatch(ed.state.tr.setSelection(sel).scrollIntoView())
+    view.focus()
+  }
+
   return (
     <div className="write">
       <div className="write-bar">
@@ -502,7 +539,7 @@ function EditorPage({ initial, categories }) {
         </div>
       )}
 
-      <div className="write-doc">
+      <div className="write-doc" onMouseDown={onPaperMouseDown}>
         <div className="write-meta">
           <input
             className="meta-input"
