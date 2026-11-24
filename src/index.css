@@ -1253,13 +1253,20 @@ kbd {
 /* ═══════════════════════════════════════════
    Prose (viewer + editor 공통)
    ═══════════════════════════════════════════ */
+/* 에디터(.editor-content.prose)와 상세 화면(.post-body.prose)이 같은 규칙을 공유 → 줄간격 동일 */
 .prose {
   font-size: 12pt;
-  line-height: 1.85;
+  line-height: 1.5;
   color: var(--g800);
 }
 .prose > * + * {
-  margin-top: 1em;
+  margin-top: 0.75em;
+}
+/* 문단 사이(엔터)는 촘촘하게: 네이버 블로그처럼 빈 줄로 간격을 조절 */
+.prose > p + p,
+.prose > div + p,
+.prose > p + div {
+  margin-top: 0.3em;
 }
 .prose p {
   min-height: 1em;

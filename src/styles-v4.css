@@ -501,3 +501,50 @@
 .w-paper-group + .w-radar-more {
   margin-top: auto;
 }
+
+/* ── 에디터 툴바: 줄간격 드롭다운 ── */
+.tb-btn.tb-lh {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  width: auto;
+  padding: 0 6px;
+}
+.tb-lh-val {
+  min-width: 22px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.lh-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 132px;
+}
+.lh-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px 0 6px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--g800);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.lh-item:hover {
+  background: var(--fill);
+}
+.lh-item.is-active {
+  color: var(--blue);
+}
+.lh-check {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+}

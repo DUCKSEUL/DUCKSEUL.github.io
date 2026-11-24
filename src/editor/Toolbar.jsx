@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../components/ui.jsx'
-import { DEFAULT_SIZE, DIVIDERS, FONT_FAMILIES, FONT_SIZES } from './extensions.js'
+import { DEFAULT_LINE_HEIGHT, DEFAULT_SIZE, DIVIDERS, FONT_FAMILIES, FONT_SIZES, LINE_HEIGHTS } from './extensions.js'
 
 const COLORS = [
   '#000000', '#333d4b', '#6b7684', '#b0b8c1', '#ffffff',
@@ -138,6 +138,51 @@ function DividerMenu({ onPick }) {
   )
 }
 
+function LineHeightMenu({ current, onPick }) {
+  const { open, setOpen, ref } = usePopover()
+  return (
+    <div className="tb-pop" ref={ref}>
+      <button
+        type="button"
+        className="tb-btn tb-lh"
+        onMouseDown={keep}
+        onClick={() => setOpen((v) => !v)}
+        title={`줄간격 (${current})`}
+        aria-label={`줄간격, 현재 ${current}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M5 4v16M2.5 6.5 5 4l2.5 2.5M2.5 17.5 5 20l2.5-2.5M11 6h10M11 12h10M11 18h10" />
+        </svg>
+        <span className="tb-lh-val">{current}</span>
+        <Icon name="chevronDown" size={12} />
+      </button>
+      {open && (
+        <div className="tb-menu lh-menu" role="menu" aria-label="줄간격">
+          {LINE_HEIGHTS.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              role="menuitemradio"
+              aria-checked={current === o.value}
+              className={`lh-item ${current === o.value ? 'is-active' : ''}`}
+              onMouseDown={keep}
+              onClick={() => {
+                onPick(o.value)
+                setOpen(false)
+              }}
+            >
+              <span className="lh-check">{current === o.value && <Icon name="check" size={14} />}</span>
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function stepFontSize(editor, dir) {
   const cur = editor.getAttributes('textStyle').fontSize || DEFAULT_SIZE
   const n = parseFloat(cur)
@@ -167,6 +212,8 @@ export default function Toolbar({ editor, onMath, onLink, onImage }) {
         ? 'h4'
         : 'p'
   const size = ts.fontSize || ''
+  const rawLh = editor.getAttributes(block === 'p' ? 'paragraph' : 'heading').lineHeight
+  const lineHeight = rawLh ? (LINE_HEIGHTS.find((o) => parseFloat(o.value) === parseFloat(rawLh))?.value ?? String(rawLh)) : DEFAULT_LINE_HEIGHT
 
   return (
     <div className="toolbar" role="toolbar" aria-label="서식 도구">
@@ -257,6 +304,7 @@ export default function Toolbar({ editor, onMath, onLink, onImage }) {
         <Btn icon="alignLeft" label="왼쪽 정렬" shortcut="Ctrl+L" active={editor.isActive({ textAlign: 'left' })} onClick={() => c().setTextAlign('left').run()} />
         <Btn icon="alignCenter" label="가운데 정렬" shortcut="Ctrl+E" active={editor.isActive({ textAlign: 'center' })} onClick={() => c().setTextAlign('center').run()} />
         <Btn icon="alignRight" label="오른쪽 정렬" shortcut="Ctrl+R" active={editor.isActive({ textAlign: 'right' })} onClick={() => c().setTextAlign('right').run()} />
+        <LineHeightMenu current={lineHeight} onPick={(v) => c().setLineHeight(v).run()} />
       </div>
 
       <div className="tb-group">

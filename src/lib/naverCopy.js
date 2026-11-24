@@ -168,7 +168,7 @@ export async function buildNaverHtml(container) {
   clone.querySelectorAll('h3').forEach((el) => replaceTag(el, 'p', 'font-size:15pt;font-weight:bold;margin:24px 0 8px;line-height:1.5'))
   clone.querySelectorAll('h4, h5, h6').forEach((el) => replaceTag(el, 'p', 'font-size:13pt;font-weight:bold;margin:20px 0 6px'))
   clone.querySelectorAll('p').forEach((el) => {
-    if (!el.closest('li, td, th, blockquote')) addStyle(el, 'margin:0 0 14px;line-height:1.8')
+    if (!el.closest('li, td, th, blockquote')) addStyle(el, 'margin:0 0 4px;line-height:1.5')
     else addStyle(el, 'margin:0')
   })
   clone.querySelectorAll('blockquote').forEach((el) =>
@@ -210,7 +210,7 @@ export async function buildNaverHtml(container) {
       el.setAttribute('style', HR[v] || HR.line)
     }
   })
-  clone.querySelectorAll('ul, ol').forEach((el) => addStyle(el, 'margin:0 0 14px;padding-left:24px;line-height:1.8'))
+  clone.querySelectorAll('ul, ol').forEach((el) => addStyle(el, 'margin:0 0 14px;padding-left:24px;line-height:1.5'))
   clone.querySelectorAll('a').forEach((el) => addStyle(el, 'color:#3182f6;text-decoration:underline'))
 
   // 사진(figure): 캡션은 옅은 회색 가운데 정렬, 테두리 옵션 반영
@@ -270,7 +270,7 @@ export async function buildNaverHtml(container) {
     el.removeAttribute('title')
   })
 
-  const html = `<div style="font-family:${FONT};font-size:12pt;line-height:1.8;color:${TEXT}">${clone.innerHTML}</div>`
+  const html = `<div style="font-family:${FONT};font-size:12pt;line-height:1.5;color:${TEXT}">${clone.innerHTML}</div>`
   const text = container.innerText
   return { html, text }
 }

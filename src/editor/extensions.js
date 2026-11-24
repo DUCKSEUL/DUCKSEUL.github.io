@@ -1,4 +1,4 @@
-import { Node, mergeAttributes } from '@tiptap/core'
+import { Extension, Node, mergeAttributes } from '@tiptap/core'
 import { ReactNodeViewRenderer } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { TextStyleKit } from '@tiptap/extension-text-style'
@@ -138,6 +138,57 @@ const Header = TableHeader.extend({
   },
 })
 
+/* ── 줄간격 (문단 단위, 네이버 블로그 스타일) ─────
+ * 문단/소제목 노드에 line-height 인라인 스타일을 붙입니다.
+ * (글자 span이 아니라 블록에 적용해야 줄 상자 높이가 실제로 바뀜) */
+export const LINE_HEIGHTS = [
+  { value: '1.2', label: '1.2 (좁게)' },
+  { value: '1.4', label: '1.4' },
+  { value: '1.5', label: '1.5 (기본)' },
+  { value: '1.8', label: '1.8' },
+  { value: '2.0', label: '2.0 (넓게)' },
+]
+export const DEFAULT_LINE_HEIGHT = '1.5'
+const LH_TYPES = ['paragraph', 'heading']
+
+export const LineHeight = Extension.create({
+  name: 'lineHeight',
+  addGlobalAttributes() {
+    return [
+      {
+        types: LH_TYPES,
+        attributes: {
+          lineHeight: {
+            default: null,
+            parseHTML: (el) => el.style.lineHeight || null,
+            renderHTML: (a) => (a.lineHeight ? { style: `line-height: ${a.lineHeight}` } : {}),
+          },
+        },
+      },
+    ]
+  },
+  addCommands() {
+    const apply =
+      (value) =>
+      ({ state, tr, dispatch }) => {
+        const { from, to } = state.selection
+        let changed = false
+        state.doc.nodesBetween(from, to, (node, pos) => {
+          if (!LH_TYPES.includes(node.type.name)) return
+          tr.setNodeMarkup(pos, undefined, { ...node.attrs, lineHeight: value })
+          changed = true
+        })
+        if (changed && dispatch) dispatch(tr)
+        return changed
+      }
+    return {
+      // 기본값(1.5)을 고르면 속성을 지워 기본 스타일을 따르게 함
+      setLineHeight: (value) => apply(value === DEFAULT_LINE_HEIGHT ? null : value),
+      unsetLineHeight: () => apply(null),
+    }
+  },
+})
+
 export const FONT_FAMILIES = [
   { label: '기본 글꼴', value: '' },
   { label: '나눔고딕', value: "'Nanum Gothic', sans-serif" },
@@ -159,6 +210,7 @@ export function buildExtensions({ onEditMath }) {
     }),
     TextStyleKit.configure({ lineHeight: false }),
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
+    LineHeight,
     Divider,
     Figure,
     TableKit.configure({ table: { resizable: false }, tableCell: false, tableHeader: false }),
