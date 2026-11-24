@@ -1,6 +1,21 @@
 {
-  "updatedAt": "2026-11-24T09:01:55.420Z",
+  "updatedAt": "2026-11-24T22:30:48.355Z",
   "items": [
+    {
+      "id": "pub-mwv9qhb6xot",
+      "type": "conference",
+      "year": 2026,
+      "month": 7,
+      "title": "Loss-Optimized Reconfigurable Nonlocal Metasurface- aided Cavity Antenna",
+      "authors": "Minwoo Cho, Jeong-hae Lee, Minseok Kim",
+      "venue": "2026 IEEE International Symposium on Antennas and Propagation and USNC-URSI Radio Science Meeting (AP- S/USNC-URSI)",
+      "description": "",
+      "doi": "",
+      "pdf": "",
+      "code": "",
+      "url": "",
+      "highlight": false
+    },
     {
       "id": "pub-mwug26hvhmx",
       "type": "journal",
