@@ -1,0 +1,14 @@
+{
+  "updatedAt": "2026-11-24T00:00:00.000Z",
+  "items": [
+    {
+      "id": "ev-journal",
+      "title": "연구 일지 공간 오픈",
+      "date": "2026-11-24",
+      "endDate": "",
+      "type": "milestone",
+      "url": "https://duckseul.github.io/journal",
+      "note": ""
+    }
+  ]
+}

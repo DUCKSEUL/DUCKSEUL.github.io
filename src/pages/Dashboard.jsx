@@ -1,30 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon, useDocumentTitle } from '../components/ui.jsx'
 import { usePosts, formatDateTime, postThumb } from '../lib/store.js'
 import { useAdmin } from '../lib/admin.js'
-import { profile, researchAreas, keywords, highlights, defaultTodos } from '../data/profile.js'
+import { useSiteData } from '../lib/siteData.js'
+import { useEvents, eventsOn } from '../lib/useEvents.js'
+import { ymd } from '../lib/google.js'
+import { pubType, eventType, dday, safeUrl } from '../lib/labels.js'
+import { useSheetPapers } from '../lib/sheets.js'
+import { ProfileLinks } from './About.jsx'
+import { PubLinks } from './Publications.jsx'
 
-function useLocalState(key, initial) {
-  const [v, setV] = useState(() => {
-    try {
-      const s = localStorage.getItem(key)
-      return s ? JSON.parse(s) : initial
-    } catch {
-      return initial
-    }
-  })
-  useEffect(() => {
-    try {
-      localStorage.setItem(key, JSON.stringify(v))
-    } catch {
-      /* ignore */
-    }
-  }, [key, v])
-  return [v, setV]
-}
-
-function Widget({ area, title, icon, action, children, className = '' }) {
+function Widget({ area, title, icon, to, children, className = '' }) {
   return (
     <section className={`widget ${className}`} style={{ gridArea: area }} aria-label={title}>
       {title && (
@@ -32,7 +19,11 @@ function Widget({ area, title, icon, action, children, className = '' }) {
           <h2>
             {icon && <Icon name={icon} size={18} />} {title}
           </h2>
-          {action}
+          {to && (
+            <Link to={to} className="w-more">
+              전체 보기 <Icon name="chevron" size={16} />
+            </Link>
+          )}
         </header>
       )}
       {children}
@@ -40,69 +31,174 @@ function Widget({ area, title, icon, action, children, className = '' }) {
   )
 }
 
+/* 1행 좌: 내 소개 */
 function ProfileWidget() {
+  const { data: a } = useSiteData('about')
   return (
-    <Widget area="profile" className="w-profile">
-      <div className="avatar" aria-hidden>
-        <Icon name="wave" size={34} />
-      </div>
-      <p className="status-pill">
-        <span className="live" /> {profile.status}
-      </p>
-      <h1 className="w-name">{profile.name}</h1>
-      <p className="w-aff">{profile.affiliation}</p>
-      <p className="w-tagline">{profile.tagline}</p>
-      <div className="w-links">
-        {profile.email && (
-          <a className="btn btn-md btn-weak" href={`mailto:${profile.email}`}>
-            <Icon name="mail" size={18} /> 이메일
-          </a>
-        )}
-        <a className="btn btn-md btn-dark" href={profile.github} target="_blank" rel="noreferrer">
-          <Icon name="github" size={18} /> GitHub
-        </a>
-      </div>
-    </Widget>
-  )
-}
-
-function ResearchWidget() {
-  return (
-    <Widget area="research" title="연구 분야 & 관심 키워드" icon="antenna">
-      <ul className="areas">
-        {researchAreas.map((a, i) => (
-          <li key={a.title}>
-            <span className={`area-dot c${i}`} />
-            <div>
-              <strong>{a.title}</strong>
-              <span>{a.desc}</span>
+    <Widget area="profile" title="내 소개" icon="user" to="/about" className="w-profile">
+      {a ? (
+        <>
+          <div className="w-profile-top">
+            <div className="avatar" aria-hidden>
+              <Icon name="wave" size={30} />
             </div>
-          </li>
-        ))}
-      </ul>
-      <ul className="kw">
-        {keywords.map((k) => (
-          <li key={k}>{k}</li>
-        ))}
-      </ul>
+            <div>
+              <h1 className="w-name">{a.name}</h1>
+              <p className="w-aff">{a.affiliation}</p>
+            </div>
+          </div>
+          {a.status && (
+            <p className="status-pill">
+              <span className="live" /> {a.status}
+            </p>
+          )}
+          {a.tagline && <p className="w-tagline">{a.tagline}</p>}
+          {a.areas?.length > 0 && (
+            <ul className="kw">
+              {a.areas.map((k) => (
+                <li key={k}>{k}</li>
+              ))}
+            </ul>
+          )}
+          <ProfileLinks about={a} />
+        </>
+      ) : (
+        <div className="w-skel" />
+      )}
     </Widget>
   )
 }
 
-function JournalWidget({ posts }) {
+/* 1행 우: 연구 실적 하이라이트 */
+function PubWidget() {
+  const { data } = useSiteData('publications')
+  const items = data?.items || []
+  const list = [...items.filter((i) => i.highlight), ...items.filter((i) => !i.highlight)].slice(0, 4)
+  const counts = ['journal', 'conference', 'patent', 'project'].map((t) => [pubType(t).label, items.filter((i) => i.type === t).length])
+  return (
+    <Widget area="pubs" title="연구 실적" icon="award" to="/publications">
+      <dl className="w-pub-counts">
+        {counts.map(([l, n]) => (
+          <div key={l}>
+            <dt>{l}</dt>
+            <dd>{n}</dd>
+          </div>
+        ))}
+      </dl>
+      {list.length ? (
+        <ul className="w-pubs">
+          {list.map((i) => {
+            const t = pubType(i.type)
+            return (
+              <li key={i.id}>
+                <span className={`pub-badge t-${t.value}`}>{t.label}</span>
+                <div>
+                  <strong>{i.title}</strong>
+                  <span>{[i.description || i.venue, i.year].filter(Boolean).join(' · ')}</span>
+                </div>
+                <PubLinks item={i} />
+              </li>
+            )
+          })}
+        </ul>
+      ) : (
+        <p className="w-empty">아직 등록된 실적이 없어요.</p>
+      )}
+    </Widget>
+  )
+}
+
+/* 2행 전체: 캘린더 (이번 주 타임라인 + 다가오는 일정 D-Day) */
+function CalendarWidget() {
+  const today = ymd(new Date())
+  const { weekStart, weekEnd, upTo } = useMemo(() => {
+    const d = new Date()
+    const mondayOffset = (d.getDay() + 6) % 7
+    const ws = new Date(d.getFullYear(), d.getMonth(), d.getDate() - mondayOffset)
+    return {
+      weekStart: ws,
+      weekEnd: new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + 6),
+      upTo: new Date(d.getFullYear(), d.getMonth(), d.getDate() + 60),
+    }
+  }, [])
+  const week = useEvents(weekStart, weekEnd)
+  const up = useEvents(new Date(new Date().setHours(0, 0, 0, 0)), upTo)
+  const upcoming = up.events.filter((e) => (e.endDate || e.date) >= today).slice(0, 5)
+  const days = Array.from({ length: 7 }, (_, i) => new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + i))
+  const now = new Date()
+
+  return (
+    <Widget area="cal" title="캘린더" icon="calendar" to="/calendar" className="w-cal">
+      <div className="w-cal-body">
+        <div className="w-week">
+          <p className="w-cal-label">
+            {now.getMonth() + 1}월 · 이번 주
+            {week.google.enabled && <span className="ev-private"> · Google 일정 포함 (나만 보임)</span>}
+          </p>
+          <ol className="week-strip">
+            {days.map((d, i) => {
+              const k = ymd(d)
+              const evs = eventsOn(week.events, k)
+              return (
+                <li key={k} className={`${k === today ? 'is-today' : ''} ${k < today ? 'is-past' : ''}`}>
+                  <span className={`wd ${i === 6 ? 'sun' : i === 5 ? 'sat' : ''}`}>{'월화수목금토일'[i]}</span>
+                  <span className="dn">{d.getDate()}</span>
+                  <ul className="day-evs">
+                    {evs.slice(0, 2).map((e) => (
+                      <li key={e.id} className={`ev-${eventType(e.type).value}`} title={e.title}>
+                        {e.time && <b>{e.time}</b>} {e.title}
+                      </li>
+                    ))}
+                    {evs.length > 2 && <li className="more">+{evs.length - 2}</li>}
+                  </ul>
+                </li>
+              )
+            })}
+          </ol>
+        </div>
+        <div className="w-upcoming">
+          <p className="w-cal-label">다가오는 일정</p>
+          {upcoming.length ? (
+            <ul>
+              {upcoming.map((e) => {
+                const t = eventType(e.type)
+                const url = safeUrl(e.url)
+                return (
+                  <li key={e.id}>
+                    <span className={`dday ${dday(e.date) === 'D-Day' ? 'is-today' : ''}`}>{dday(e.date)}</span>
+                    <div>
+                      {url ? (
+                        <a href={url} target="_blank" rel="noreferrer">
+                          {e.title}
+                        </a>
+                      ) : (
+                        <strong>{e.title}</strong>
+                      )}
+                      <span>
+                        <em className={`ev-tag ev-${t.value}`}>{t.label}</em> {e.date.slice(5).replace('-', '.')}
+                        {e.time && ` ${e.time}`}
+                      </span>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <p className="w-empty">앞으로 60일 동안 예정된 일정이 없어요.</p>
+          )}
+        </div>
+      </div>
+    </Widget>
+  )
+}
+
+/* 3행 좌: 최근 연구 일지 */
+function JournalWidget() {
   const { isAdmin } = useAdmin()
+  const { posts } = usePosts()
   const latest = posts.filter((p) => !p.draft || p.source === 'modified').slice(0, 4)
   return (
-    <Widget
-      area="journal"
-      title="최근 연구 일지"
-      icon="book"
-      action={
-        <Link to="/journal" className="w-more">
-          전체 보기 <Icon name="chevron" size={16} />
-        </Link>
-      }
-    >
+    <Widget area="journal" title="최근 연구 일지" icon="book" to="/journal">
       {latest.length ? (
         <ul className="w-posts">
           {latest.map((p) => {
@@ -133,195 +229,55 @@ function JournalWidget({ posts }) {
   )
 }
 
-function HighlightsWidget() {
+/* 3행 우: 논문 레이더 (Google Sheets 실시간) */
+function RadarWidget() {
+  const { data: radar, ready } = useSiteData('radar')
+  const sheet = useSheetPapers(ready ? radar?.sheetUrl || '' : '', radar?.sheetName || '')
+  const list = (sheet.data?.papers || []).slice(0, 4)
   return (
-    <Widget area="projects" title="주요 프로젝트 · 논문" icon="spark">
-      <ul className="w-hl">
-        {highlights.map((h) => (
-          <li key={h.title}>
-            <a href={h.href} target="_blank" rel="noreferrer">
-              <span className={`hl-type ${h.type === 'Paper' ? 'paper' : ''}`}>{h.type}</span>
-              <div>
-                <strong>{h.title}</strong>
-                <span>{h.desc}</span>
-              </div>
-              <span className="hl-meta">{h.meta}</span>
-            </a>
-          </li>
-        ))}
-      </ul>
-    </Widget>
-  )
-}
-
-function TodoWidget() {
-  const { isAdmin } = useAdmin()
-  const [tab, setTab] = useState('todo')
-  const [todos, setTodos] = useLocalState('dash-todos', defaultTodos)
-  const [memo, setMemo] = useLocalState('dash-memo', '')
-  const [text, setText] = useState('')
-  const done = todos.filter((t) => t.done).length
-
-  const add = (e) => {
-    e.preventDefault()
-    if (!text.trim()) return
-    setTodos([...todos, { id: Date.now().toString(36), text: text.trim(), done: false }])
-    setText('')
-  }
-
-  return (
-    <Widget area="todo" className="w-todo">
-      <header className="widget-head">
-        <div className="mini-tabs" role="tablist">
-          <button role="tab" aria-selected={tab === 'todo'} className={tab === 'todo' ? 'is-active' : ''} onClick={() => setTab('todo')}>
-            진행 중인 작업
-          </button>
-          {isAdmin && (
-            <button role="tab" aria-selected={tab === 'memo'} className={tab === 'memo' ? 'is-active' : ''} onClick={() => setTab('memo')}>
-              빠른 메모
-            </button>
-          )}
-        </div>
-        {tab === 'todo' && (
-          <span className="w-count">
-            {done}/{todos.length}
-          </span>
-        )}
-      </header>
-      {tab === 'todo' || !isAdmin ? (
-        <>
-          <div className="progress" aria-hidden>
-            <span style={{ width: `${todos.length ? (done / todos.length) * 100 : 0}%` }} />
-          </div>
-          <ul className="todos">
-            {todos.map((t) => (
-              <li key={t.id} className={t.done ? 'is-done' : ''}>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={t.done}
-                    disabled={!isAdmin}
-                    onChange={() => setTodos(todos.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)))}
-                  />
-                  <span className="check" aria-hidden>
-                    <Icon name="check" size={14} strokeWidth={3} />
+    <Widget area="radar" title="논문 레이더" icon="radar" to="/radar">
+      {sheet.sample && <p className="w-sample">샘플 데이터 · Google Sheets 연결 전</p>}
+      {sheet.error ? (
+        <p className="w-empty">{sheet.error}</p>
+      ) : sheet.loading && !sheet.data ? (
+        <div className="w-skel" />
+      ) : list.length ? (
+        <ul className="w-papers">
+          {list.map((p) => (
+            <li key={p.id}>
+              <a href={p.link || undefined} target="_blank" rel="noreferrer" className={p.link ? '' : 'no-link'}>
+                <strong>{p.title}</strong>
+                <span className="w-paper-authors">{[p.venue, p.year].filter(Boolean).join(' · ')}</span>
+                {p.tags.length > 0 && (
+                  <span className="w-paper-tags">
+                    {p.tags.slice(0, 3).map((t) => (
+                      <em key={t}>#{t}</em>
+                    ))}
                   </span>
-                  <span className="todo-text">{t.text}</span>
-                </label>
-                {isAdmin && (
-                <button className="todo-del" onClick={() => setTodos(todos.filter((x) => x.id !== t.id))} aria-label="삭제">
-                  <Icon name="close" size={14} />
-                </button>
                 )}
-              </li>
-            ))}
-          </ul>
-          {isAdmin && (
-          <form className="todo-add" onSubmit={add}>
-            <input value={text} onChange={(e) => setText(e.target.value)} placeholder="할 일 추가" aria-label="할 일 추가" />
-            <button type="submit" aria-label="추가">
-              <Icon name="plus" size={18} />
-            </button>
-          </form>
-          )}
-        </>
+              </a>
+            </li>
+          ))}
+        </ul>
       ) : (
-        <textarea
-          className="memo"
-          value={memo}
-          onChange={(e) => setMemo(e.target.value)}
-          placeholder="떠오른 아이디어를 바로 적어 두세요. 자동으로 저장돼요."
-          aria-label="빠른 메모"
-        />
+        <p className="w-empty">시트에 논문이 없어요.</p>
       )}
-      {isAdmin && <p className="w-foot">이 브라우저에 자동 저장돼요</p>}
-    </Widget>
-  )
-}
-
-function StatsWidget({ posts }) {
-  const pub = posts.filter((p) => !p.draft || p.source === 'modified')
-  const now = new Date()
-  const thisMonth = pub.filter((p) => {
-    const d = new Date(p.createdAt)
-    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
-  }).length
-  const last = pub[0]
-  return (
-    <Widget area="stats" title="기록 현황" icon="chart" className="w-stats">
-      <div className="stat-big">
-        <strong>{pub.length}</strong>
-        <span>전체 일지</span>
-      </div>
-      <dl className="stat-row">
-        <div>
-          <dt>이번 달</dt>
-          <dd>{thisMonth}편</dd>
-        </div>
-        <div>
-          <dt>마지막 기록</dt>
-          <dd>{last ? formatDateTime(last.createdAt, false) : '-'}</dd>
-        </div>
-      </dl>
-    </Widget>
-  )
-}
-
-function QuickWidget({ posts }) {
-  const { isAdmin } = useAdmin()
-  const latest = posts.find((p) => !p.draft || p.source === 'modified')
-  return (
-    <Widget area="quick" title="바로가기" icon="arrowRight" className="w-quick">
-      <div className="quick">
-        {isAdmin ? (
-          <Link to="/write" className="quick-item blue">
-            <Icon name="pen" size={20} />
-            <span>새 일지</span>
-          </Link>
-        ) : (
-          <Link to={latest ? `/journal/${latest.id}` : '/journal'} className="quick-item blue">
-            <Icon name="note" size={20} />
-            <span>최근 글</span>
-          </Link>
-        )}
-        <Link to="/journal" className="quick-item purple">
-          <Icon name="book" size={20} />
-          <span>일지 목록</span>
-        </Link>
-        {isAdmin ? (
-          <button className="quick-item green" onClick={async () => (await import('../lib/exportImport.js')).exportJSON(posts)}>
-            <Icon name="download" size={20} />
-            <span>백업</span>
-          </button>
-        ) : (
-          <a href={profile.email ? `mailto:${profile.email}` : profile.github} className="quick-item green">
-            <Icon name="mail" size={20} />
-            <span>연락하기</span>
-          </a>
-        )}
-        <a href={profile.github} target="_blank" rel="noreferrer" className="quick-item dark">
-          <Icon name="github" size={20} />
-          <span>GitHub</span>
-        </a>
-      </div>
     </Widget>
   )
 }
 
 export default function Dashboard() {
-  useDocumentTitle(`${profile.name} · Research Dashboard`)
-  const { posts } = usePosts()
+  const { data: a } = useSiteData('about')
+  useDocumentTitle(`${a?.name || 'DUCKSEUL'} · Research Dashboard`)
   return (
     <div className="page dash-page">
       <div className="container">
-        <div className="bento">
+        <div className="bento bento-v3">
           <ProfileWidget />
-          <JournalWidget posts={posts} />
-          <ResearchWidget />
-          <HighlightsWidget />
-          <TodoWidget />
-          <StatsWidget posts={posts} />
-          <QuickWidget posts={posts} />
+          <PubWidget />
+          <CalendarWidget />
+          <JournalWidget />
+          <RadarWidget />
         </div>
       </div>
     </div>

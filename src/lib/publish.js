@@ -52,44 +52,64 @@ async function readPosts(ref) {
   }
 }
 
-async function attempt({ upserts, deletes, message }) {
-  // 1. main 브랜치의 최신 커밋
+/** main 최신 커밋 위에 tree 항목들을 얹어 커밋 1개를 만들고 main을 fast-forward */
+async function commit(build, message) {
   const ref = await gh(`${R}/git/ref/heads/${REPO.branch}`)
   const head = ref.object.sha
   const headCommit = await gh(`${R}/git/commits/${head}`)
-
-  // 2. 저장소의 현재 posts.json에 변경분만 합침 (다른 기기에서 발행한 글을 덮어쓰지 않도록)
-  const [remote, existingImages] = await Promise.all([readPosts(head), listDir(IMAGE_DIR, head)])
-  const images = new Map()
-  const processed = []
-  for (const p of upserts) processed.push({ ...clean(p), html: await extractImages(p.html, images) })
-
-  const touched = new Set([...deletes, ...processed.map((p) => p.id)])
-  const merged = [...remote.filter((p) => !touched.has(p.id)), ...processed].sort((a, b) =>
-    (b.createdAt || '').localeCompare(a.createdAt || ''),
-  )
-
-  // 3. 더 이상 어떤 글에서도 쓰지 않는 사진은 삭제
-  const before = new Set(remote.filter((p) => touched.has(p.id)).flatMap((p) => imageNames(p.html)))
-  const inUse = new Set(merged.flatMap((p) => imageNames(p.html)))
-  const unused = [...before].filter((n) => !inUse.has(n) && existingImages.has(n))
-
-  // 4. 트리 구성: 새 사진(blob) + posts.json + 삭제
-  const tree = []
-  for (const [name, b64] of images) {
-    if (existingImages.has(name)) continue
-    const blob = await gh(`${R}/git/blobs`, { method: 'POST', body: { content: b64, encoding: 'base64' } })
-    tree.push({ path: `${IMAGE_DIR}/${name}`, mode: '100644', type: 'blob', sha: blob.sha })
-  }
-  tree.push({ path: POSTS_PATH, mode: '100644', type: 'blob', content: JSON.stringify(merged, null, 2) + '\n' })
-  for (const name of unused) tree.push({ path: `${IMAGE_DIR}/${name}`, mode: '100644', type: 'blob', sha: null })
-
-  // 5. 커밋 생성 후 main을 앞으로 이동 (fast-forward만 허용)
+  const { tree, result } = await build(head)
   const newTree = await gh(`${R}/git/trees`, { method: 'POST', body: { base_tree: headCommit.tree.sha, tree } })
-  const commit = await gh(`${R}/git/commits`, { method: 'POST', body: { message, tree: newTree.sha, parents: [head] } })
-  await gh(`${R}/git/refs/heads/${REPO.branch}`, { method: 'PATCH', body: { sha: commit.sha, force: false } })
+  const c = await gh(`${R}/git/commits`, { method: 'POST', body: { message, tree: newTree.sha, parents: [head] } })
+  await gh(`${R}/git/refs/heads/${REPO.branch}`, { method: 'PATCH', body: { sha: c.sha, force: false } })
+  return { commitUrl: c.html_url, sha: c.sha, ...result }
+}
 
-  return { commitUrl: commit.html_url, sha: commit.sha, posts: merged, uploaded: images.size, removed: unused.length }
+async function withRetry(fn) {
+  try {
+    return await fn()
+  } catch (e) {
+    // 그 사이 다른 커밋이 올라와 fast-forward가 안 되면 한 번 더 시도
+    if (e.status === 422 || e.status === 409) return fn()
+    throw e
+  }
+}
+
+/** JSON 파일 하나를 저장소에 커밋 (내 소개·연구 실적·공개 일정·논문 레이더 등) */
+export function publishJSON(path, data, message) {
+  const content = JSON.stringify(data, null, 2) + '\n'
+  return withRetry(() => commit(async () => ({ tree: [{ path, mode: '100644', type: 'blob', content }], result: {} }), message))
+}
+
+async function attempt({ upserts, deletes, message }) {
+  return commit(async (head) => {
+    // 2. 저장소의 현재 posts.json에 변경분만 합침 (다른 기기에서 발행한 글을 덮어쓰지 않도록)
+    const [remote, existingImages] = await Promise.all([readPosts(head), listDir(IMAGE_DIR, head)])
+    const images = new Map()
+    const processed = []
+    for (const p of upserts) processed.push({ ...clean(p), html: await extractImages(p.html, images) })
+
+    const touched = new Set([...deletes, ...processed.map((p) => p.id)])
+    const merged = [...remote.filter((p) => !touched.has(p.id)), ...processed].sort((a, b) =>
+      (b.createdAt || '').localeCompare(a.createdAt || ''),
+    )
+
+    // 3. 더 이상 어떤 글에서도 쓰지 않는 사진은 삭제
+    const before = new Set(remote.filter((p) => touched.has(p.id)).flatMap((p) => imageNames(p.html)))
+    const inUse = new Set(merged.flatMap((p) => imageNames(p.html)))
+    const unused = [...before].filter((n) => !inUse.has(n) && existingImages.has(n))
+
+    // 4. 트리 구성: 새 사진(blob) + posts.json + 삭제
+    const tree = []
+    for (const [name, b64] of images) {
+      if (existingImages.has(name)) continue
+      const blob = await gh(`${R}/git/blobs`, { method: 'POST', body: { content: b64, encoding: 'base64' } })
+      tree.push({ path: `${IMAGE_DIR}/${name}`, mode: '100644', type: 'blob', sha: blob.sha })
+    }
+    tree.push({ path: POSTS_PATH, mode: '100644', type: 'blob', content: JSON.stringify(merged, null, 2) + '\n' })
+    for (const name of unused) tree.push({ path: `${IMAGE_DIR}/${name}`, mode: '100644', type: 'blob', sha: null })
+
+    return { tree, result: { posts: merged, uploaded: images.size, removed: unused.length } }
+  }, message)
 }
 
 /**
@@ -104,11 +124,5 @@ export async function publishChanges({ upserts = [], deletes = [], message } = {
       : upserts.length
         ? `journal: 「${upserts[0].title}」 발행`
         : `journal: ${deletes[0]} 삭제`)
-  try {
-    return await attempt({ upserts, deletes, message: msg })
-  } catch (e) {
-    // 그 사이 다른 커밋이 올라와 fast-forward가 안 되면 한 번 더 시도
-    if (e.status === 422 || e.status === 409) return attempt({ upserts, deletes, message: msg })
-    throw e
-  }
+  return withRetry(() => attempt({ upserts, deletes, message: msg }))
 }

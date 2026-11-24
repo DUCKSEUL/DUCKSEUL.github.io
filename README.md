@@ -9,12 +9,37 @@
 ## 화면 구성
 | 경로 | 내용 |
 | --- | --- |
-| `/` | 벤토 그리드 대시보드 (프로필, 연구 분야, 최근 일지, 프로젝트, 할 일/메모, 기록 현황, 바로가기) |
-| `/journal` | 연구 일지 목록 (카테고리 필터, 관리자: 글마다 삭제 버튼 · 백업/불러오기/모두 발행) |
-| `/journal/:id` | 일지 본문 (사진 확대, 네이버 블로그용 복사, 관리자: 수정/삭제) |
+| `/` | 2열 벤토 홈 — 1행: 내 소개 · 연구 실적 / 2행: 캘린더(전체 너비, 이번 주 + D-Day) / 3행: 최근 연구 일지 · 논문 레이더 |
+| `/about` | 내 소개 — 학력, 소속 연구실, 연구 관심사, 기술 스택 (관리자: 수정) |
+| `/journal`, `/journal/:id` | 연구 일지 목록 / 본문 (관리자: 글마다 삭제 · 백업/불러오기/모두 발행) |
+| `/publications` | 연구 실적 — Journal · Conference · Patent · Projects 필터, DOI/PDF/코드 링크 (관리자: 추가/수정/삭제) |
+| `/radar` | 논문 레이더 — Google Sheets 실시간 연동, 카드/테이블 보기, 키워드 필터, 검색 (관리자: 시트 연결 설정) |
+| `/calendar` | 캘린더 — 월간 달력 + 다가오는 일정. 방문자: 공개 일정만 / 관리자 + Google 연결: 내 캘린더도 (이 브라우저에만) |
 | `/write`, `/write/:id` | 글쓰기 / 수정 에디터 (관리자 전용) |
 
-대시보드 내용은 `src/data/profile.js`에서 수정합니다. (소속·이메일 포함)
+## 공개 데이터 (`public/data/`)
+| 파일 | 내용 | 수정 |
+| --- | --- | --- |
+| `about.json` | 내 소개 | 내 소개 → 수정 |
+| `publications.json` | 연구 실적 | 연구 실적 → 실적 추가 / ✏️ |
+| `events.json` | 공개 일정 (모든 방문자에게 보임) | 캘린더 → 공개 일정 추가 / ✏️ |
+| `radar.json` | 논문 레이더 Google Sheets 링크·탭 이름 | 논문 레이더 → 시트 연결 설정 |
+| `posts.json` | 연구 일지 | 글쓰기 → 발행 |
+
+관리자 모드에서 저장하면 해당 JSON이 GitHub 저장소에 커밋되고 Actions가 자동 배포합니다(1~2분).
+
+## 논문 레이더 — Google Sheets
+1. 시트 첫 행에 헤더: `제목` `저자` `저널/학회` `연도` `키워드/태그` `한줄요약` `링크` `읽음상태` (영어 `Title`, `Authors`, `Journal`, `Year`, `Keywords`, `Summary`, `URL`, `Status`도 자동 인식)
+2. 공유 → 일반 액세스 **「링크가 있는 모든 사용자」· 뷰어** → 링크 복사
+3. 논문 레이더 → **시트 연결 설정**에 링크(필요하면 탭 이름) 저장. API 키 없이 `gviz/tq?tqx=out:json`으로 브라우저가 직접 읽습니다.
+- 연결 전에는 샘플 논문 4편과 설정 가이드가 보입니다. 링크 공유를 켠 시트는 링크를 아는 누구나 볼 수 있으니 공개 가능한 내용만 넣으세요.
+
+## 캘린더 — Google Calendar (읽기 전용)
+- Google Identity Services **Token Client** 방식, 공개용 OAuth Client ID만 사용 (Client Secret 없음). 권한은 `calendar.readonly` 하나.
+- Access Token은 **메모리 + sessionStorage**에만 보관(탭 닫기/1시간 후 소멸), localStorage·저장소에는 저장하지 않음. 관리자 로그아웃 시 즉시 폐기.
+- Google Cloud Console에서 OAuth 클라이언트(웹 애플리케이션)를 만들고 **승인된 JavaScript 원본**에 `https://duckseul.github.io`, `http://localhost:5173`만 등록.
+  Calendar API 사용 설정, 동의 화면은 테스트 모드 + 내 계정만 테스트 사용자로.
+- Client ID는 캘린더 → **Google 캘린더 연결** 설정 창에 입력(이 브라우저에 저장)하거나 `src/config.js`의 `GOOGLE_CLIENT_ID`에 넣으면 됩니다.
 
 ## 관리자 모드 (GitHub API 기반 CMS)
 - 일반 방문자에게는 글쓰기·수정·삭제·불러오기 버튼이 보이지 않습니다. (`/write`는 "관리자 전용" 안내)

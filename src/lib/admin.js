@@ -3,6 +3,7 @@
 // ※ 화면을 숨기는 것은 편의 기능일 뿐, 실제 쓰기 권한은 GitHub 토큰이 결정합니다.
 import { useSyncExternalStore } from 'react'
 import { REPO, AUTH_URL } from '../config.js'
+import { disconnect as disconnectGoogle } from './google.js'
 
 const KEY = 'admin-gh-token'
 const NONCE_KEY = 'admin-gh-nonce'
@@ -134,6 +135,7 @@ export async function login(token) {
 }
 
 export function logout() {
+  disconnectGoogle() // 관리자 로그아웃 시 Google 토큰도 즉시 폐기
   try {
     localStorage.removeItem(KEY)
   } catch {

@@ -10,6 +10,10 @@ import { profile } from './data/profile.js'
 
 // 에디터(TipTap)는 무거우므로 글쓰기 화면에 들어갈 때만 불러옵니다.
 const Write = lazy(() => import('./pages/Write.jsx'))
+const Publications = lazy(() => import('./pages/Publications.jsx'))
+const Radar = lazy(() => import('./pages/Radar.jsx'))
+const Calendar = lazy(() => import('./pages/Calendar.jsx'))
+const About = lazy(() => import('./pages/About.jsx'))
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -31,8 +35,12 @@ export default function App() {
           <Suspense fallback={<div className="page" />}>
             <Routes location={location}>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/about" element={<About />} />
               <Route path="/journal" element={<JournalList />} />
               <Route path="/journal/:id" element={<JournalPost />} />
+              <Route path="/publications" element={<Publications />} />
+              <Route path="/radar" element={<Radar />} />
+              <Route path="/calendar" element={<Calendar />} />
               <Route path="/write" element={<Write />} />
               <Route path="/write/:id" element={<Write />} />
               <Route path="*" element={<NotFound />} />

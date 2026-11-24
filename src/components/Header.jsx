@@ -1,9 +1,18 @@
 import { useEffect, useState } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { Icon, toast } from './ui.jsx'
 import { profile } from '../data/profile.js'
 import { useAdmin, logout, clearLoginMessages } from '../lib/admin.js'
 import AdminLogin from './AdminLogin.jsx'
+
+const NAV = [
+  { to: '/', label: '홈', icon: 'home' },
+  { to: '/about', label: '내 소개', icon: 'user' },
+  { to: '/journal', label: '연구 일지', icon: 'book' },
+  { to: '/publications', label: '연구 실적', icon: 'award' },
+  { to: '/radar', label: '논문 레이더', icon: 'radar' },
+  { to: '/calendar', label: '캘린더', icon: 'calendar' },
+]
 
 function useTheme() {
   const [theme, setTheme] = useState(() => {
@@ -38,6 +47,11 @@ export default function Header() {
   }, [error, notice])
   const [loginOpen, setLoginOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  // 모바일 가로 스크롤 메뉴: 현재 탭이 보이도록
+  const { pathname } = useLocation()
+  useEffect(() => {
+    document.querySelector('.nav a.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [pathname])
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 4)
     on()
@@ -55,14 +69,12 @@ export default function Header() {
           <span className="logo-text">{profile.name}</span>
         </Link>
         <nav className="nav" aria-label="주요 메뉴">
-          <NavLink to="/" end>
-            <Icon name="home" size={18} />
-            <span>홈</span>
-          </NavLink>
-          <NavLink to="/journal">
-            <Icon name="book" size={18} />
-            <span>연구 일지</span>
-          </NavLink>
+          {NAV.map((n) => (
+            <NavLink key={n.to} to={n.to} end={n.to === '/'} title={n.label}>
+              <Icon name={n.icon} size={18} />
+              <span>{n.label}</span>
+            </NavLink>
+          ))}
         </nav>
         <div className="header-actions">
           <button className="icon-btn" onClick={toggle} aria-label="테마 전환">

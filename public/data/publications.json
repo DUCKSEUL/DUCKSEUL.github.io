@@ -1,0 +1,47 @@
+{
+  "updatedAt": "2026-11-24T00:00:00.000Z",
+  "items": [
+    {
+      "id": "pj-iemom",
+      "type": "project",
+      "title": "3D IE-MoM Solver",
+      "authors": "DUCKSEUL",
+      "venue": "MATLAB",
+      "year": 2026,
+      "description": "3차원 적분방정식 기반 모멘트법 솔버 구현",
+      "doi": "",
+      "pdf": "",
+      "code": "https://github.com/DUCKSEUL/261026_3D_IE_MoM_by_Claude",
+      "url": "",
+      "highlight": true
+    },
+    {
+      "id": "pj-edbf",
+      "type": "project",
+      "title": "EDBF with GPT",
+      "authors": "DUCKSEUL",
+      "venue": "Research",
+      "year": 2026,
+      "description": "LLM을 활용한 빔포밍 알고리즘 구현 실험",
+      "doi": "",
+      "pdf": "",
+      "code": "https://github.com/DUCKSEUL/EDBF_with_GPT",
+      "url": "",
+      "highlight": true
+    },
+    {
+      "id": "pj-pystudy",
+      "type": "project",
+      "title": "Python Study · Codetree",
+      "authors": "DUCKSEUL",
+      "venue": "Python",
+      "year": 2026,
+      "description": "Python 알고리즘 기본기 학습 기록",
+      "doi": "",
+      "pdf": "",
+      "code": "https://github.com/DUCKSEUL/PythonStudy_Codetree",
+      "url": "",
+      "highlight": false
+    }
+  ]
+}

@@ -40,6 +40,10 @@ function page(route, title, description, image) {
 fs.copyFileSync(path.join(dist, 'index.html'), path.join(dist, '404.html'))
 page('/journal/', '연구 일지 · DUCKSEUL', '실험 결과, 시행착오, 읽은 논문, 떠오른 아이디어를 기록하는 연구 일지')
 page('/write/', '일지 쓰기 · DUCKSEUL', '연구 일지 작성')
+page('/about/', '내 소개 · DUCKSEUL', '학력, 소속 연구실, 연구 관심사, 기술 스택')
+page('/publications/', '연구 실적 · DUCKSEUL', '저널 논문, 학술대회, 특허, 코드와 프로젝트')
+page('/radar/', '논문 레이더 · DUCKSEUL', '관심 키워드 기반 arXiv 최신 논문과 큐레이션한 논문 목록')
+page('/calendar/', '캘린더 · DUCKSEUL', '연구실 세미나, 학회 마감, 연구 마일스톤 일정')
 
 let n = 0
 for (const p of posts) {
@@ -48,4 +52,4 @@ for (const p of posts) {
   page(`/journal/${p.id}/`, `${p.title} · 연구 일지`, text(p.html).slice(0, 150), img && !img.startsWith('data:') ? img : null)
   n++
 }
-console.log(`postbuild: 404.html + /journal + /write + ${n} post page(s)`)
+console.log(`postbuild: 404.html + 6 section pages + ${n} post page(s)`)

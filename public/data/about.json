@@ -1,0 +1,64 @@
+{
+  "updatedAt": "2026-11-24T00:00:00.000Z",
+  "name": "DUCKSEUL",
+  "affiliation": "Computational Electromagnetics Lab",
+  "status": "3D IE-MoM 솔버 고도화 중",
+  "tagline": "전자기 문제를 수치적으로 풀고, 그 과정을 코드와 일지로 남깁니다.",
+  "areas": [
+    "Method of Moments",
+    "Integral Equation",
+    "Metasurface",
+    "Beamforming",
+    "AI-assisted Research"
+  ],
+  "links": {
+    "github": "https://github.com/DUCKSEUL",
+    "email": "",
+    "scholar": ""
+  },
+  "lab": {
+    "name": "Computational Electromagnetics Lab",
+    "desc": "",
+    "url": ""
+  },
+  "education": [],
+  "interests": [
+    {
+      "title": "적분방정식 & 모멘트법",
+      "desc": "3차원 도체·유전체 전자기 산란/복사 해석"
+    },
+    {
+      "title": "빔포밍 & 배열 신호처리",
+      "desc": "배열 안테나 빔 형성 기법 모델링"
+    },
+    {
+      "title": "AI 보조 연구 워크플로",
+      "desc": "LLM으로 수치해석 코드 작성·검증 가속"
+    }
+  ],
+  "skills": [
+    {
+      "group": "Simulation",
+      "items": [
+        "MATLAB",
+        "HFSS"
+      ]
+    },
+    {
+      "group": "Programming",
+      "items": [
+        "Python",
+        "MATLAB"
+      ]
+    },
+    {
+      "group": "Methods",
+      "items": [
+        "Method of Moments",
+        "EFIE / MFIE",
+        "RWG Basis",
+        "Green's Function"
+      ]
+    }
+  ]
+}
