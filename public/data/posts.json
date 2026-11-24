@@ -17,8 +17,8 @@
     "category": "연구 노트",
     "tags": [],
     "createdAt": "2026-11-24T01:38:01.171Z",
-    "updatedAt": "2026-11-24T03:47:55.736Z",
+    "updatedAt": "2026-11-24T06:02:31.876Z",
     "draft": false,
-    "html": "<figure data-type=\"figure\" style=\"width: 100%;\"><img src=\"/journal/images/9c0abe5c6987c9f1.png\" alt=\"image\"></figure><p style=\"text-align: center;\"><span style=\"font-family: &quot;Times New Roman&quot;, Tinos, serif;\"><span data-type=\"math-inline\" data-latex=\"\\nabla \\times \\mathbf{E} = -\\frac{\\partial\\mathbf{B}}{\\partial t}\">\\nabla \\times \\mathbf{E} = -\\frac{\\partial\\mathbf{B}}{\\partial t}</span></span></p><p style=\"text-align: center;\"><span style=\"font-family: &quot;Times New Roman&quot;, Tinos, serif; font-size: 14pt;\">HFSS</span></p><p style=\"text-align: center;\"></p><p style=\"text-align: center;\"><span data-type=\"math-inline\" data-latex=\"\\nabla great\">\\nabla great</span></p>"
+    "html": "<figure data-type=\"figure\" style=\"width: 100%;\"><img src=\"/journal/images/9c0abe5c6987c9f1.png\" alt=\"image\"></figure><p style=\"text-align: center;\"><span style=\"font-family: &quot;Times New Roman&quot;, Tinos, serif;\"><span data-type=\"math-inline\" data-latex=\"\\nabla \\times \\mathbf{E} = -\\frac{\\partial\\mathbf{B}}{\\partial t}\">\\nabla \\times \\mathbf{E} = -\\frac{\\partial\\mathbf{B}}{\\partial t}</span></span></p><p style=\"text-align: center;\"><span style=\"font-family: &quot;Times New Roman&quot;, Tinos, serif; font-size: 14pt;\">HFSS</span></p><p style=\"text-align: center;\"><span data-type=\"math-inline\" data-latex=\"\\partial E\">\\partial E</span></p><p style=\"text-align: center;\"><span data-type=\"math-inline\" data-latex=\"\\nabla great\">\\nabla great</span></p>"
   }
 ]
