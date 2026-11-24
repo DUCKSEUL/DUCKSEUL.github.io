@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-24T00:00:00.000Z",
+  "updatedAt": "2026-11-24T05:47:41.025Z",
   "name": "DUCKSEUL",
   "affiliation": "Computational Electromagnetics Lab",
   "status": "3D IE-MoM 솔버 고도화 중",
@@ -7,9 +7,7 @@
   "areas": [
     "Method of Moments",
     "Integral Equation",
-    "Metasurface",
-    "Beamforming",
-    "AI-assisted Research"
+    "Metasurface Antennas"
   ],
   "links": {
     "github": "https://github.com/DUCKSEUL",
@@ -17,9 +15,9 @@
     "scholar": ""
   },
   "lab": {
-    "name": "Computational Electromagnetics Lab",
-    "desc": "",
-    "url": ""
+    "name": "Hongik AEL",
+    "url": "",
+    "desc": ""
   },
   "education": [],
   "interests": [
