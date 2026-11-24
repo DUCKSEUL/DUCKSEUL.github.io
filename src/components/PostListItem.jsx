@@ -9,9 +9,9 @@ export default function PostListItem({ post }) {
       <div className="post-item-body">
         <p className="post-item-cat">
           <span>{post.category || '연구 노트'}</span>
-          {post.draft && <em className="badge warn">임시저장</em>}
+          {post.draft && <em className="badge private">{post.source === 'modified' ? '나만 보기 · 공개본 있음' : '나만 보기'}</em>}
           {post.source === 'local' && !post.draft && <em className="badge warn">발행 전</em>}
-          {post.source === 'modified' && <em className="badge warn">발행 전 수정본</em>}
+          {post.source === 'modified' && !post.draft && <em className="badge warn">발행 전 수정본</em>}
           {post.source === 'syncing' && <em className="badge sync">배포 대기</em>}
         </p>
         <h3>{post.title}</h3>

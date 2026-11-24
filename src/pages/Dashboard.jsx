@@ -91,7 +91,7 @@ function ResearchWidget() {
 
 function JournalWidget({ posts }) {
   const { isAdmin } = useAdmin()
-  const latest = posts.filter((p) => !p.draft).slice(0, 4)
+  const latest = posts.filter((p) => !p.draft || p.source === 'modified').slice(0, 4)
   return (
     <Widget
       area="journal"
@@ -240,7 +240,7 @@ function TodoWidget() {
 }
 
 function StatsWidget({ posts }) {
-  const pub = posts.filter((p) => !p.draft)
+  const pub = posts.filter((p) => !p.draft || p.source === 'modified')
   const now = new Date()
   const thisMonth = pub.filter((p) => {
     const d = new Date(p.createdAt)
@@ -269,7 +269,7 @@ function StatsWidget({ posts }) {
 
 function QuickWidget({ posts }) {
   const { isAdmin } = useAdmin()
-  const latest = posts.find((p) => !p.draft)
+  const latest = posts.find((p) => !p.draft || p.source === 'modified')
   return (
     <Widget area="quick" title="바로가기" icon="arrowRight" className="w-quick">
       <div className="quick">

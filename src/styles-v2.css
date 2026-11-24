@@ -765,3 +765,33 @@
 .token-alt[open] summary {
   margin-bottom: 14px;
 }
+.btn-kbd {
+  margin-left: 4px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--g500);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+.badge.private {
+  background: var(--purple-weak);
+  color: var(--purple);
+}
+.private-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 20px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--purple-weak);
+  color: var(--g800);
+  font-size: 0.9rem;
+}
+.private-note a {
+  margin-left: auto;
+  color: var(--purple);
+  font-weight: 700;
+  white-space: nowrap;
+}

@@ -28,7 +28,7 @@ export default function Write() {
   return <EditorPage key={id || 'new'} initial={existing} categories={[...new Set(posts.map((p) => p.category).filter(Boolean))]} />
 }
 
-function SaveBadge({ savedAt, saving }) {
+function SaveBadge({ savedAt, saving, privateAt }) {
   const [, tick] = useState(0)
   useEffect(() => {
     const t = setInterval(() => tick((n) => n + 1), 1000)
@@ -37,7 +37,11 @@ function SaveBadge({ savedAt, saving }) {
   return (
     <span className={`save-badge ${savedAt ? 'is-saved' : ''}`} aria-live="polite">
       <span className={`dot ${saving ? 'is-saving' : ''}`} />
-      {savedAt ? `${relativeTime(savedAt)} 임시저장됨` : '작성 중'}
+      {privateAt && (!savedAt || privateAt >= savedAt)
+        ? `${relativeTime(privateAt)} 저장됨 (나만 보기)`
+        : savedAt
+          ? `${relativeTime(savedAt)} 자동 백업됨`
+          : '작성 중'}
     </span>
   )
 }
@@ -67,6 +71,8 @@ function EditorPage({ initial, categories }) {
   const [mathState, setMathState] = useState(null)
   const [linkState, setLinkState] = useState(null)
   const [publishing, setPublishing] = useState(false)
+  const [privateAt, setPrivateAt] = useState(null)
+  const saveRef = useRef(null)
   const fileRef = useRef(null)
   const editorRef = useRef(null)
   const dirty = useRef(false)
@@ -186,6 +192,13 @@ function EditorPage({ initial, categories }) {
       if (!ed) return
       const mod = e.ctrlKey || e.metaKey
       // Ctrl+E / L / R : 정렬 (브라우저 기본 동작 차단)
+      // Ctrl+S : 나만 보기로 저장 (제목·태그 입력 중에도 동작, 브라우저 '페이지 저장' 차단)
+      if (mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        e.stopPropagation()
+        saveRef.current?.()
+        return
+      }
       if (mod && !e.altKey && !e.shiftKey && inEditor(e)) {
         const k = e.key.toLowerCase()
         if (k === 'e' || k === 'l' || k === 'r') {
@@ -300,25 +313,44 @@ function EditorPage({ initial, categories }) {
     setLinkState(null)
   }
 
+  const buildPost = (draft) => ({
+    id: postId,
+    title: title.trim() || '제목 없음',
+    category: category.trim() || '연구 노트',
+    tags: tags
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean),
+    createdAt: createdAt.current,
+    updatedAt: new Date().toISOString(),
+    draft,
+    html: editor.getHTML(),
+  })
+
+  // 저장: 이 브라우저에만, 관리자에게만 보임 (저장소는 public이라 커밋하지 않음)
+  const savePrivate = async () => {
+    if (!editorRef.current || publishing) return
+    try {
+      await savePost(buildPost(true))
+      await clearDraft(draftKey)
+      dirty.current = false
+      setPrivateAt(Date.now())
+      // 새 글이면 주소를 /write/:id 로 바꿔 새로고침해도 이어서 쓸 수 있게 (에디터는 그대로 유지)
+      if (!initial) window.history.replaceState(window.history.state, '', `/write/${postId}`)
+      toast(initial?.source === 'published' || initial?.source === 'modified' ? '저장했어요. 공개된 글은 발행 전까지 그대로예요.' : '저장했어요. 나에게만 보여요.')
+    } catch {
+      toast('저장 공간이 부족해 저장하지 못했어요. 백업 후 다시 시도해 주세요.', 'error')
+    }
+  }
+  saveRef.current = savePrivate
+
   const publish = async () => {
     if (!title.trim()) {
       toast('제목을 입력해 주세요.', 'error')
       document.getElementById('post-title')?.focus()
       return
     }
-    const post = {
-      id: postId,
-      title: title.trim(),
-      category: category.trim() || '연구 노트',
-      tags: tags
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean),
-      createdAt: createdAt.current,
-      updatedAt: new Date().toISOString(),
-      draft: false,
-      html: editor.getHTML(),
-    }
+    const post = buildPost(false)
     // 1) 먼저 이 브라우저에 저장 (GitHub 발행이 실패해도 글이 사라지지 않도록)
     try {
       await savePost(post)
@@ -353,9 +385,12 @@ function EditorPage({ initial, categories }) {
           <Link to={initial ? `/journal/${initial.id}` : '/journal'} className="back-link">
             <Icon name="chevronLeft" size={18} /> <span className="hide-sm">{initial ? '글로 돌아가기' : '연구 일지'}</span>
           </Link>
-          <SaveBadge savedAt={savedAt} saving={saving} />
-          <button className="btn btn-md btn-primary" onClick={publish} disabled={publishing}>
-            {publishing ? '발행 중…' : initial ? '수정 발행' : '발행 (Publish)'}
+          <SaveBadge savedAt={savedAt} saving={saving} privateAt={privateAt} />
+          <button className="btn btn-md btn-ghost" onClick={savePrivate} disabled={publishing} title="나만 보이게 저장 (Ctrl+S)">
+            저장<span className="hide-sm btn-kbd">Ctrl+S</span>
+          </button>
+          <button className="btn btn-md btn-primary" onClick={publish} disabled={publishing} title="모든 방문자에게 공개">
+            {publishing ? '발행 중…' : initial && initial.source !== 'local' ? '수정 발행' : '발행 (Publish)'}
           </button>
         </div>
         <div className="toolbar-wrap">
@@ -427,7 +462,7 @@ function EditorPage({ initial, categories }) {
             예상 읽기 시간 <strong data-testid="read-time">{counts.minutes}분</strong>
           </span>
           <span className="foot-keys hide-sm">
-            <kbd>Ctrl</kbd>+<kbd>E</kbd>/<kbd>L</kbd>/<kbd>R</kbd> 정렬 · <kbd>Alt</kbd>+<kbd>1</kbd>/<kbd>2</kbd> 사진 크기 · <kbd>Alt</kbd>+<kbd>3</kbd> 수식
+            <kbd>Ctrl</kbd>+<kbd>S</kbd> 저장 · <kbd>Ctrl</kbd>+<kbd>E</kbd>/<kbd>L</kbd>/<kbd>R</kbd> 정렬 · <kbd>Alt</kbd>+<kbd>1</kbd>/<kbd>2</kbd> 사진 크기 · <kbd>Alt</kbd>+<kbd>3</kbd> 수식
           </span>
         </div>
       </div>

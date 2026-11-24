@@ -44,7 +44,13 @@ function back(redirect, params) {
 const STATE_TTL = 10 * 60 * 1000
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, rawEnv) {
+    // 복사·붙여넣기 때 따라 들어간 공백/줄바꿈 제거
+    const env = {
+      ...rawEnv,
+      GITHUB_CLIENT_ID: (rawEnv.GITHUB_CLIENT_ID || '').trim(),
+      GITHUB_CLIENT_SECRET: (rawEnv.GITHUB_CLIENT_SECRET || '').trim(),
+    }
     const url = new URL(request.url)
 
     if (url.pathname === '/login') {

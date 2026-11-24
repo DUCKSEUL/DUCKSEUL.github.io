@@ -177,6 +177,16 @@ export default function JournalPost() {
           </>
         )}
 
+        {isAdmin && post.draft && (
+          <p className="private-note" role="note">
+            <Icon name="note" size={18} />
+            {post.source === 'modified'
+              ? '나만 보이는 수정본이에요. 방문자에게는 이전에 발행한 내용이 보여요.'
+              : '나만 보이는 글이에요. 아직 방문자에게 공개되지 않았어요.'}
+            <Link to={`/write/${post.id}`}>발행하러 가기</Link>
+          </p>
+        )}
+
         <div ref={bodyRef} className="prose post-body" onClick={onBodyClick} dangerouslySetInnerHTML={{ __html: html }} />
 
         <nav className="post-nav" aria-label="다른 일지">
