@@ -892,17 +892,39 @@
   height: 11px;
 }
 .gh-tip {
+  /* body 포털 + 최상위 레이어: 카드 overflow·형제 위젯·상단 내비 위로 항상 표시 */
   position: fixed;
-  z-index: 60;
+  z-index: 2147483000;
+  max-width: calc(100vw - 24px);
   padding: 6px 10px;
   border-radius: 8px;
-  background: rgba(25, 31, 40, 0.92);
+  background: rgba(25, 31, 40, 0.94);
   color: #fff;
   font-size: 0.76rem;
   font-weight: 600;
+  line-height: 1.4;
   white-space: nowrap;
   pointer-events: none;
-  transform: translate(-50%, calc(-100% - 8px));
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+}
+.gh-tip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: var(--arrow-x, 50%);
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: rgba(25, 31, 40, 0.94);
+}
+.gh-tip.is-below::after {
+  top: auto;
+  bottom: 100%;
+  border-top-color: transparent;
+  border-bottom-color: rgba(25, 31, 40, 0.94);
+}
+.gh-cell.is-active {
+  outline: 2px solid var(--g800);
+  outline-offset: 1px;
 }
 /* 사진만 있는 줄은 기호가 다음 줄로 밀리지 않게 오른쪽 여백에 표시 */
 .editor-content p:has(> .img-node) {

@@ -1,5 +1,6 @@
 // 홈: GitHub 잔디(최근 1년 Contribution) — 토큰 없이 공개 API 사용 (CORS 허용)
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Icon } from './ui.jsx'
 
 const USER = 'DUCKSEUL'
@@ -51,11 +52,78 @@ const parse = (d) => {
   const [y, m, day] = d.split('-').map(Number)
   return new Date(y, m - 1, day)
 }
+const EDGE = 12 // 뷰포트 좌우·상하 최소 여백
+const GAP = 8 // 칸과 툴팁 사이 간격
+
+/** 툴팁: body 포털로 띄워 카드 overflow·쌓임 맥락과 무관하게 항상 맨 위에 표시, 화면 안으로 위치 보정 */
+function ContribTip({ tip }) {
+  const ref = useRef(null)
+  const [pos, setPos] = useState(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const { width, height } = el.getBoundingClientRect()
+    const vw = document.documentElement.clientWidth
+    const vh = window.innerHeight
+    const r = tip.rect
+    const cx = r.left + r.width / 2
+    const left = Math.min(Math.max(cx - width / 2, EDGE), Math.max(EDGE, vw - EDGE - width))
+    // 위쪽 한계: 상단 고정 내비 아래 (내비가 화면에 걸쳐 있을 때)
+    const nav = document.querySelector('body > #root header.header, header.header')?.getBoundingClientRect()
+    const minTop = Math.max(EDGE, nav && nav.bottom > 0 ? nav.bottom + 4 : 0)
+    const below = r.top - GAP - height < minTop && r.bottom + GAP + height <= vh - EDGE
+    const top = below ? r.bottom + GAP : r.top - GAP - height
+    // 화살표는 칸 중앙을 가리키도록 (툴팁 안쪽 범위로 제한)
+    const arrow = Math.min(Math.max(cx - left, 10), width - 10)
+    setPos({ left, top, below, arrow })
+  }, [tip])
+  return createPortal(
+    <div
+      ref={ref}
+      className={`gh-tip${pos?.below ? ' is-below' : ''}`}
+      role="tooltip"
+      style={pos ? { left: pos.left, top: pos.top, '--arrow-x': `${pos.arrow}px` } : { left: 0, top: 0, visibility: 'hidden' }}
+    >
+      {tip.text}
+    </div>,
+    document.body,
+  )
+}
+
 const fmt = (d) => `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`
 
 export default function GitHubContrib() {
   const { data, loading, error } = useContributions()
   const [tip, setTip] = useState(null)
+  const gridRef = useRef(null)
+
+  // 다른 곳 터치·클릭, 스크롤, 화면 크기 변경, Esc → 닫기
+  useEffect(() => {
+    if (!tip) return
+    const close = () => setTip(null)
+    const onDown = (e) => {
+      if (!gridRef.current?.contains(e.target)) close()
+    }
+    const onKey = (e) => e.key === 'Escape' && close()
+    document.addEventListener('pointerdown', onDown, true)
+    window.addEventListener('scroll', close, { capture: true, passive: true })
+    window.addEventListener('resize', close)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true)
+      window.removeEventListener('scroll', close, { capture: true })
+      window.removeEventListener('resize', close)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [tip])
+
+  const show = (el, c, pinned) =>
+    setTip({
+      key: c.date,
+      pinned,
+      rect: el.getBoundingClientRect(),
+      text: `${fmt(parse(c.date))} · ${c.count ? `${c.count}개의 contribution` : 'contribution 없음'}`,
+    })
 
   const grid = useMemo(() => {
     const days = data?.contributions || []
@@ -112,16 +180,26 @@ export default function GitHubContrib() {
                   <span key={i}>{d}</span>
                 ))}
               </div>
-              <div className="gh-grid" role="img" aria-label={`최근 1년 동안 ${total}개의 contribution`} onMouseLeave={() => setTip(null)}>
+              <div
+                className="gh-grid"
+                ref={gridRef}
+                role="img"
+                aria-label={`최근 1년 동안 ${total}개의 contribution`}
+                onMouseLeave={() => setTip((t) => (t?.pinned ? t : null))}
+              >
                 {grid.cells.map((c, i) =>
                   c ? (
                     <span
                       key={c.date}
-                      className="gh-cell"
+                      className={`gh-cell${tip?.key === c.date ? ' is-active' : ''}`}
                       data-l={c.level}
                       onMouseEnter={(e) => {
-                        const r = e.currentTarget.getBoundingClientRect()
-                        setTip({ x: r.left + r.width / 2, y: r.top, text: `${fmt(parse(c.date))} · ${c.count ? `${c.count}개의 contribution` : 'contribution 없음'}` })
+                        if (!tip?.pinned) show(e.currentTarget, c, false)
+                      }}
+                      onClick={(e) => {
+                        // 클릭·터치: 같은 칸이면 닫고, 아니면 고정 표시
+                        if (tip?.pinned && tip.key === c.date) setTip(null)
+                        else show(e.currentTarget, c, true)
                       }}
                     />
                   ) : (
@@ -137,11 +215,7 @@ export default function GitHubContrib() {
               적음 {[0, 1, 2, 3, 4].map((l) => <span key={l} className="gh-cell" data-l={l} />)} 많음
             </span>
           </div>
-          {tip && (
-            <div className="gh-tip" role="tooltip" style={{ left: tip.x, top: tip.y }}>
-              {tip.text}
-            </div>
-          )}
+          {tip && <ContribTip tip={tip} />}
         </>
       )}
     </section>
