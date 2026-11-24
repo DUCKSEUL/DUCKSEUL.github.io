@@ -109,7 +109,7 @@ function PubWidget() {
   )
 }
 
-/* 2행 전체: 캘린더 (이번 주 타임라인 + 다가오는 일정 D-Day) */
+/* 4행 전체: 캘린더 (이번 주 타임라인 + 다가오는 일정 D-Day) */
 function CalendarWidget() {
   const today = ymd(new Date())
   const { weekStart, weekEnd, upTo } = useMemo(() => {
@@ -325,10 +325,10 @@ export default function Dashboard() {
         <div className="bento bento-v3">
           <ProfileWidget />
           <PubWidget />
-          <CalendarWidget />
+          <GitHubContrib />
           <JournalWidget />
           <RadarWidget />
-          <GitHubContrib />
+          <CalendarWidget />
         </div>
       </div>
     </div>

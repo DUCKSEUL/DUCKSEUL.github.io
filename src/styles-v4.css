@@ -772,13 +772,13 @@
 .bento.bento-v3 {
   grid-template-areas:
     'profile pubs'
-    'cal     cal'
+    'github  github'
     'journal radar'
-    'github  github';
+    'cal     cal';
 }
 @media (max-width: 720px) {
   .bento.bento-v3 {
-    grid-template-areas: 'profile' 'pubs' 'cal' 'journal' 'radar' 'github';
+    grid-template-areas: 'profile' 'pubs' 'github' 'journal' 'radar' 'cal';
   }
 }
 .gh-total {
