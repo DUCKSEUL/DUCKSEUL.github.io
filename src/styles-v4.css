@@ -774,13 +774,13 @@
 .bento.bento-v3 {
   grid-template-areas:
     'profile pubs'
-    'github  github'
     'journal radar'
+    'github  github'
     'cal     cal';
 }
 @media (max-width: 720px) {
   .bento.bento-v3 {
-    grid-template-areas: 'profile' 'pubs' 'github' 'journal' 'radar' 'cal';
+    grid-template-areas: 'profile' 'pubs' 'journal' 'radar' 'github' 'cal';
   }
 }
 .gh-total {
@@ -939,4 +939,190 @@
 .editor-content > :is(ul, ol):last-child > li:last-child > p:last-child:has(> br.ProseMirror-trailingBreak:only-child) > br.ProseMirror-trailingBreak,
 .editor-content > blockquote:last-child > p:last-child:has(> br.ProseMirror-trailingBreak:only-child) > br.ProseMirror-trailingBreak {
   display: inline;
+}
+
+/* ═══ v9: 다크 모드 이미지 · 보안 옵션 · 홈 밀도 ═══ */
+
+/* ── 다크 모드: 연구 일지 이미지는 원본 밝기 그대로 (어둡게 하지 않음)
+ *    투명 배경 PNG 그래프가 어두운 배경에 묻히지 않도록 밝은 카드 배경 + 미세한 테두리만 */
+:root[data-theme='dark'] :is(.prose, .editor-content) img:not(.ProseMirror-separator):not([data-math]),
+:root[data-theme='dark'] .prose figure img {
+  filter: none !important;
+  opacity: 1 !important;
+  mix-blend-mode: normal !important;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) :is(.prose, .editor-content) img:not(.ProseMirror-separator):not([data-math]),
+  :root:not([data-theme='light']) .prose figure img {
+    filter: none !important;
+    opacity: 1 !important;
+    mix-blend-mode: normal !important;
+    background: #ffffff;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+  }
+}
+
+/* ── 체크 행 (로그인 유지 · 공개 스냅샷 동기화) ── */
+.check-row {
+  display: flex !important;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.86rem;
+  color: var(--g700);
+  cursor: pointer;
+}
+.check-row input {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  flex: none;
+  accent-color: var(--blue);
+}
+.snap-opt {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+/* ── 홈: 소개 카드 「현재 연구 포커스」 ── */
+.w-focus {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--blue) 7%, var(--surface)), color-mix(in srgb, var(--purple) 6%, var(--surface)));
+  border: 1px solid color-mix(in srgb, var(--blue) 14%, transparent);
+}
+.w-focus-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 8px;
+  color: var(--blue);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.w-focus ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.w-focus li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.w-focus .area-dot {
+  margin-top: 6px;
+  flex: none;
+}
+.w-focus li div {
+  display: grid;
+  min-width: 0;
+}
+.w-focus strong {
+  color: var(--g800);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+.w-focus li span:not(.area-dot) {
+  color: var(--g600);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+/* ── 홈: GitHub 잔디는 보조 위젯 — 컴팩트하게 ── */
+.bento .w-github {
+  padding-top: 16px;
+  padding-bottom: 14px;
+}
+.w-github .widget-head {
+  margin-bottom: 8px;
+}
+.w-github .gh-graph {
+  grid-template-columns: 20px auto;
+  justify-content: start;
+  min-width: 0;
+  gap: 4px;
+}
+.w-github .gh-grid {
+  grid-auto-columns: 11px;
+  grid-template-rows: repeat(7, 11px);
+  gap: 2px;
+}
+.w-github .gh-cell {
+  width: 11px;
+  height: 11px;
+  aspect-ratio: auto;
+  border-radius: 2px;
+}
+.w-github .gh-days {
+  grid-template-rows: repeat(7, 11px);
+  gap: 2px;
+  font-size: 0.62rem;
+}
+.w-github .gh-months {
+  height: 14px;
+  font-size: 0.68rem;
+}
+.w-github .gh-foot {
+  margin-top: 6px;
+  font-size: 0.72rem;
+}
+.w-github .gh-legend .gh-cell {
+  width: 10px;
+  height: 10px;
+}
+
+/* ── 논문 레이더: 보조 회색 글씨 대비 상향 ── */
+.w-radar,
+li.paper,
+.paper-table {
+  --radar-sub: #4b5563;
+}
+:root[data-theme='dark'] :is(.w-radar, li.paper, .paper-table) {
+  --radar-sub: #cbd5e1;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) :is(.w-radar, li.paper, .paper-table) {
+    --radar-sub: #cbd5e1;
+  }
+}
+.w-radar .venue-badge,
+.w-radar .spec-cem,
+.w-radar .w-date-head span,
+.w-radar .w-radar-more,
+.paper-authors,
+.paper-venue .venue-badge,
+.paper-sum,
+.paper-spec .spec-cem {
+  color: var(--radar-sub);
+}
+/* 밀도 미세 조정: 포커스 박스는 컴팩트하게(설명 한 줄), 잔디는 가운데 정렬 */
+.w-focus {
+  margin-top: 14px;
+  padding: 10px 12px;
+}
+.w-focus ul {
+  gap: 5px;
+}
+.w-focus li span:not(.area-dot) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.w-github .gh-wrap {
+  display: flex;
+}
+/* auto 여백: 넓으면 가운데, 좁으면(모바일) 왼쪽부터 가로 스크롤 — 잘림 없음 */
+.w-github .gh-graph {
+  flex: none;
+  margin: 0 auto;
 }

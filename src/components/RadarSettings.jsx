@@ -4,7 +4,7 @@ import { Icon, toast } from './ui.jsx'
 import { ClientIdField } from './GoogleConnect.jsx'
 import { useGoogle, connect } from '../lib/google.js'
 import { saveSiteData } from '../lib/siteData.js'
-import { fetchSheet, parseSheetUrl, ROLE_DEFS, makeSnapshot, SNAPSHOT_PATH } from '../lib/sheets.js'
+import { fetchSheet, parseSheetUrl, ROLE_DEFS, makeSnapshot, SNAPSHOT_PATH, PUBLIC_ROLES } from '../lib/sheets.js'
 import { API_KEY_REFERRERS, GOOGLE_ALLOWED_ORIGINS, SHEETS_SCOPE } from '../config.js'
 
 const MODES = [
@@ -81,6 +81,7 @@ export default function RadarSettings({ open, onClose, radar }) {
       sheetName: radar?.sheetName || '',
       apiKey: radar?.apiKey || '',
       columns: { ...(radar?.columns || {}) },
+      snapshotAutoSync: radar?.snapshotAutoSync === true,
     })
     setTest(null)
     setError('')
@@ -135,13 +136,14 @@ export default function RadarSettings({ open, onClose, radar }) {
         sheetName: cfg.sheetName.trim(),
         apiKey: cfg.mode === 'apikey' ? cfg.apiKey.trim() : '', // OAuth/gviz 모드에서는 키를 남기지 않음
         columns,
+        snapshotAutoSync: cfg.snapshotAutoSync === true,
       }
-      // 방문자용 공개 스냅샷도 같은 커밋에 저장 (비공개 시트여도 방문자 화면이 비지 않도록)
-      extra = [{ path: SNAPSHOT_PATH, data: makeSnapshot(d) }]
+      // [공개 스냅샷 동기화]를 켠 경우에만, 공개 허용 열만 걸러 같은 커밋에 저장
+      if (next.snapshotAutoSync) extra = [{ path: SNAPSHOT_PATH, data: makeSnapshot(d, columns) }]
     }
     setBusy('save')
     try {
-      await saveSiteData('radar', next, `radar: 데이터 소스 ${next.mode} 설정 + 공개 스냅샷`, extra)
+      await saveSiteData('radar', next, `radar: 데이터 소스 ${next.mode} 설정${extra.length ? ' + 공개 스냅샷(공개 열만)' : ''}`, extra)
       toast('논문 레이더 설정을 저장했어요. 1~2분 뒤 모든 방문자에게 반영돼요.')
       onClose()
     } catch (e) {
@@ -206,6 +208,21 @@ export default function RadarSettings({ open, onClose, radar }) {
                 API Key로는 공개(링크 공유) 시트만 읽을 수 있어요. 요청 형식: <code>sheets.googleapis.com/v4/spreadsheets/{'{ID}'}/values/{'{RANGE}'}?key=…</code>
               </p>
             )}
+          </section>
+        )}
+
+        {cfg.mode !== 'sample' && (
+          <section className="snap-opt">
+            <label className="check-row">
+              <input type="checkbox" checked={!!cfg.snapshotAutoSync} onChange={(e) => set('snapshotAutoSync', e.target.checked)} />
+              <span>
+                <strong>[공개 스냅샷 동기화]</strong> 시트를 읽을 때 방문자용 <code>papers.json</code>을 자동으로 갱신
+              </span>
+            </label>
+            <p className="form-hint">
+              끄면(기본) 논문 레이더의 「공개 스냅샷 저장」 버튼을 눌렀을 때만 저장돼요. 어느 쪽이든 공개 허용 열({PUBLIC_ROLES.map((r) => ROLE_DEFS.find((d) => d.role === r)?.label).join(', ')})만 저장되고,
+              코멘트·메모·읽음상태·중요도 같은 열과 「비공개」 표시가 된 행은 빠져요.
+            </p>
           </section>
         )}
 

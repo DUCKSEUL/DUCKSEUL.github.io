@@ -5,7 +5,9 @@ import { gh } from './admin.js'
 import { REPO, POSTS_PATH, IMAGE_DIR, IMAGE_URL } from '../config.js'
 
 const R = `/repos/${REPO.owner}/${REPO.name}`
-const EXT = { jpeg: 'jpg', jpg: 'jpg', png: 'png', gif: 'gif', webp: 'webp', 'svg+xml': 'svg' }
+// SVG는 파일로 올리지 않음(사이트 도메인의 .svg는 직접 열면 스크립트가 실행될 수 있음) → 발행 전에 PNG로 변환
+const EXT = { jpeg: 'jpg', jpg: 'jpg', png: 'png', gif: 'gif', webp: 'webp' }
+const DATA_SVG = /src="(data:image\/svg\+xml[^"]*)"/g
 const DATA_IMG = /src="data:image\/([a-z+]+);base64,([^"]+)"/g
 const SITE_IMG = new RegExp(`src="(${IMAGE_URL.replace(/\//g, '\\/')}\\/[^"]+)"`, 'g')
 
@@ -16,6 +18,17 @@ async function sha256(text) {
 
 /** 본문의 data URL 사진을 파일로 분리하고 src를 사이트 경로로 바꿉니다. */
 async function extractImages(html, images) {
+  // 1) SVG data URL → 안전한 PNG (변환 실패 시 사진 제거)
+  for (const [, src] of [...html.matchAll(DATA_SVG)]) {
+    const { svgSrcToPng } = await import('./image.js')
+    let png = ''
+    try {
+      png = await svgSrcToPng(src.replace(/&amp;/g, '&'))
+    } catch (e) {
+      console.warn('[publish] SVG 변환 실패, 제거합니다:', e)
+    }
+    html = html.split(src).join(png)
+  }
   const found = [...html.matchAll(DATA_IMG)]
   for (const [, type, b64] of found) {
     const ext = EXT[type]

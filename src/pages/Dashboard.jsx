@@ -61,6 +61,24 @@ function ProfileWidget() {
               ))}
             </ul>
           )}
+          {a.interests?.length > 0 && (
+            <div className="w-focus" aria-label="현재 연구 포커스">
+              <p className="w-focus-title">
+                <Icon name="spark" size={14} /> 현재 연구 포커스
+              </p>
+              <ul>
+                {a.interests.slice(0, 3).map((it, i) => (
+                  <li key={it.title}>
+                    <span className={`area-dot c${i % 3}`} aria-hidden />
+                    <div>
+                      <strong>{it.title}</strong>
+                      {it.desc && <span>{it.desc}</span>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <ProfileLinks about={a} />
         </>
       ) : (
@@ -325,9 +343,9 @@ export default function Dashboard() {
         <div className="bento bento-v3">
           <ProfileWidget />
           <PubWidget />
-          <GitHubContrib />
           <JournalWidget />
           <RadarWidget />
+          <GitHubContrib />
           <CalendarWidget />
         </div>
       </div>

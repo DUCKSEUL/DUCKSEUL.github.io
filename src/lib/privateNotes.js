@@ -126,6 +126,28 @@ export async function createPrivateRepo(repo) {
   }
 }
 
+export const PUBLIC_REPO_WARNING = '보안 경고: 대상 저장소가 공개(Public) 상태입니다. 비공개(Private) 저장소로 설정된 경우에만 저장할 수 있습니다.'
+
+/**
+ * 커밋 직전 안전장치: 대상 저장소가 실제로 private인지 GitHub API로 확인.
+ * public이거나 확인할 수 없으면(없음·권한 없음) 저장을 막음 → 개인 노트가 공개 저장소에 올라가는 사고 방지
+ */
+export async function assertPrivateRepo(repo) {
+  let info
+  try {
+    info = await gh(base(repo))
+  } catch (e) {
+    const err = new Error(`${PUBLIC_REPO_WARNING} (${repo.owner}/${repo.name} 저장소를 확인할 수 없어요: ${e.status || e.message})`)
+    err.code = 'not-private'
+    throw err
+  }
+  if (info?.private !== true || (info.visibility && info.visibility !== 'private')) {
+    const err = new Error(PUBLIC_REPO_WARNING)
+    err.code = 'not-private'
+    throw err
+  }
+}
+
 export const newRepoUrl = (repo) => `https://github.com/new?name=${encodeURIComponent(repo.name)}&visibility=private`
 
 const clean = ({ source, syncedAt, private: _p, ...p }) => p // eslint-disable-line no-unused-vars
@@ -144,6 +166,7 @@ export async function writePrivate(repo, { upserts = [], removes = [] }, message
       cur = await readPrivate(repo)
       if (cur.state === 'no-repo') throw guide(repo, 404)
     }
+    await assertPrivateRepo(repo) // 커밋 직전: private 여부 필수 확인
     const touched = new Set([...removes, ...upserts.map((p) => p.id)])
     const merged = sortPosts([...cur.posts.filter((p) => !touched.has(p.id)), ...upserts.map(clean)])
     await gh(`${base(repo)}/contents/${PRIVATE_FILE}`, {

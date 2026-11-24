@@ -12,11 +12,42 @@ import { usePosts, savePost, newId, markSynced, savePrivatePost, removePrivatePo
 import { useAdmin } from '../lib/admin.js'
 import AdminOnly from '../components/AdminOnly.jsx'
 import { saveDraft, loadDraft, clearDraft, relativeTime } from '../lib/drafts.js'
-import { fileToDataUrl, imageFiles } from '../lib/image.js'
+import { fileToDataUrl, imageFiles, isSvgSrc, svgSrcToPng } from '../lib/image.js'
 import NotFound from './NotFound.jsx'
 import { JOURNAL_CATS } from '../lib/labels.js'
 
 const AUTOSAVE_MS = 2000
+
+/** 붙여넣기 등으로 들어온 SVG 사진을 안전한 PNG로 교체 (스크립트가 든 SVG가 그대로 발행되지 않도록) */
+const svgBusy = new Set()
+function sanitizeSvgImages(editor) {
+  const found = []
+  editor.state.doc.descendants((node) => {
+    if (node.type.name === 'image' && isSvgSrc(node.attrs.src || '') && !svgBusy.has(node.attrs.src)) found.push(node.attrs.src)
+  })
+  for (const src of new Set(found)) {
+    svgBusy.add(src)
+    svgSrcToPng(src)
+      .catch((e) => {
+        console.warn('[editor] SVG 변환 실패:', e)
+        toast('SVG 사진은 안전을 위해 PNG로 바꿔 넣어요. 이 SVG는 변환하지 못해 제외했어요.', 'error')
+        return null
+      })
+      .then((png) => {
+        svgBusy.delete(src)
+        if (editor.isDestroyed) return
+        const { tr } = editor.state
+        let changed = false
+        editor.state.doc.descendants((node, pos) => {
+          if (node.type.name !== 'image' || node.attrs.src !== src) return
+          if (png) tr.setNodeMarkup(tr.mapping.map(pos), undefined, { ...node.attrs, src: png })
+          else tr.delete(tr.mapping.map(pos), tr.mapping.map(pos + node.nodeSize))
+          changed = true
+        })
+        if (changed) editor.view.dispatch(tr)
+      })
+  }
+}
 
 export default function Write() {
   const { id } = useParams()
@@ -134,10 +165,12 @@ function EditorPage({ initial, categories }) {
         return true
       },
     },
-    onUpdate: () => {
+    onUpdate: ({ editor: ed }) => {
       dirty.current = true
       docChanged.current = true
+      sanitizeSvgImages(ed)
     },
+    onCreate: ({ editor: ed }) => sanitizeSvgImages(ed),
   })
   editorRef.current = editor
 

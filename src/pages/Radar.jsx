@@ -284,7 +284,7 @@ export default function Radar() {
   const syncSnapshot = async () => {
     setSyncing(true)
     try {
-      await publishSnapshot(sheet.data)
+      await publishSnapshot(sheet.data, radar?.columns)
       toast('공개 스냅샷을 저장했어요. 1~2분 뒤 방문자 화면에 반영돼요.')
     } catch (e) {
       toast(`스냅샷 저장 실패: ${e.message}`, 'error')

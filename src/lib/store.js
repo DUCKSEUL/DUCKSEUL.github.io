@@ -54,7 +54,7 @@ export async function refreshPrivate() {
   const { status, user } = getAdminState()
   if (status !== 'admin') return
   const seq = ++privateLoadSeq
-  const { readPrivate, privateRepo } = await privateApi()
+  const { readPrivate, privateRepo, assertPrivateRepo } = await privateApi()
   const repo = privateRepo(user?.login)
   privateStatus = { ...privateStatus, state: 'loading', repo }
   emit()
@@ -63,6 +63,14 @@ export async function refreshPrivate() {
     if (seq !== privateLoadSeq || !isAdminNow()) return
     privatePosts = res.posts
     privateStatus = { state: res.state, repo, count: res.posts.length, loadedAt: Date.now() }
+    if (res.state !== 'no-repo') {
+      try {
+        await assertPrivateRepo(repo)
+      } catch (e) {
+        if (seq !== privateLoadSeq || !isAdminNow()) return
+        privateStatus = { ...privateStatus, state: 'error', error: e.message }
+      }
+    }
   } catch (e) {
     if (seq !== privateLoadSeq || !isAdminNow()) return
     privatePosts = []

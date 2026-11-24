@@ -21,11 +21,11 @@ export const ROLE_DEFS = [
   { role: 'venue', label: '저널/학회', names: ['저널/학회', '저널', '학회', '출처', '게재지', '출판 정보', '출판', '게재', 'venue', 'journal', 'conference', 'source', 'publication'] },
   { role: 'year', label: '발행연도', names: ['발행연도', '연도', '년도', '출판연도', 'year', 'pub year', 'published'] },
   { role: 'tags', label: '키워드/태그', names: ['키워드/태그', '키워드', '태그', '분야', 'keyword', 'keywords', 'tag', 'tags', 'topic'] },
-  { role: 'summary', label: '한줄요약', names: ['한줄요약', '한 줄 요약', '요약', '메모', 'summary', 'note', 'notes', 'tl;dr', 'abstract'] },
+  { role: 'summary', label: '한줄요약', names: ['한줄요약', '한 줄 요약', '공개용 한줄요약', '공개 요약', '요약', 'summary', 'tl;dr', 'abstract'] },
   { role: 'link', label: 'DOI/원문 링크', names: ['doi/원문 링크', '원문 링크', '원문', '링크', '주소', 'doi', 'url', 'link', 'pdf'] },
   { role: 'importance', label: '중요도', names: ['중요도', '중요', '우선순위', '순위/등급', '등급', '순위', 'importance', 'priority', 'rank', 'grade', 'star', 'stars', 'rating'] },
   { role: 'status', label: '읽음상태', names: ['읽음상태', '읽음 상태', '상태', '읽음', 'status', 'read', 'state'] },
-  { role: 'comment', label: '내 코멘트', names: ['소감', '코멘트', '내 평가', '한줄 소감', '평가', 'comment', 'my note', 'review'] },
+  { role: 'comment', label: '내 코멘트', names: ['소감', '코멘트', '내 평가', '한줄 소감', '평가', '메모', '비고', 'comment', 'my note', 'note', 'notes', 'memo', 'review'] },
   { role: 'freq', label: '동작 주파수', names: ['동작 주파수', '주파수', '대역', '주파수 대역', 'frequency', 'freq', 'band', 'operating frequency'] },
   { role: 'cem', label: 'CEM 기법', names: ['cem 기법', 'cem', '해석 기법', '수치 기법', '기법', '방법론', 'method', 'methods', 'solver', 'technique'] },
   { role: 'structure', label: '핵심 구조/소자', names: ['핵심 구조/소자', '핵심 구조', '구조/소자', '구조', '소자', 'structure', 'device'] },
@@ -367,8 +367,45 @@ export function fingerprint(headers, rows) {
   return (h >>> 0).toString(36) + text.length.toString(36)
 }
 
-export function makeSnapshot(data) {
-  return { syncedAt: new Date().toISOString(), fingerprint: fingerprint(data.headers, data.rows), headers: data.headers, rows: data.rows }
+/* 공개 범위: 방문자에게 내보내도 되는 열만 (화이트리스트).
+ * 내 코멘트·메모·읽음상태·중요도·구조 등 나머지 열은 공개 스냅샷과 방문자 화면에서 제외 */
+export const PUBLIC_ROLES = ['date', 'title', 'authors', 'venue', 'year', 'freq', 'cem', 'summary', 'link']
+// 행 단위 비공개 표시: 「비공개/private」 열이 참이거나, 「공개/공개 여부/public」 열이 거짓이면 제외
+const PRIVATE_COL = /^(비공개|비공개 여부|private|hidden|숨김)$/i
+const PUBLIC_COL = /^(공개|공개 여부|공개여부|public|visibility|게시)$/i
+const TRUE_V = /^(y|yes|true|o|ok|1|v|✓|✔|☑|비공개|private|숨김|hidden|x)$/i
+const FALSE_V = /^(n|no|false|0|x|비공개|private|숨김|hidden|미공개)$/i
+
+function isPrivateRow(headers, row) {
+  return headers.some((h, i) => {
+    const v = String(row[i] ?? '').trim()
+    if (!v) return false
+    const name = norm(h)
+    if (PRIVATE_COL.test(name)) return TRUE_V.test(v)
+    if (PUBLIC_COL.test(name)) return FALSE_V.test(v)
+    return false
+  })
+}
+
+/** 시트 데이터 → 공개용 표 (허용된 열만, 비공개 행 제외). 헤더 이름은 원래 이름을 유지해 컬럼 매핑이 그대로 동작 */
+export function publicTable(data, columns) {
+  const roles = data.roles || detectRoles(data.headers, columns)
+  const cols = PUBLIC_ROLES.filter((r) => roles[r] !== undefined).map((r) => roles[r])
+  const headers = cols.map((i) => data.headers[i])
+  const rows = data.rows.filter((row) => !isPrivateRow(data.headers, row)).map((row) => cols.map((i) => row[i] ?? ''))
+  return { headers, rows }
+}
+
+/** 방문자용 데이터: 공개 열·공개 행만 남겨 다시 계산 */
+export function toPublicData(data, columns) {
+  if (!data) return data
+  const t = publicTable(data, columns)
+  return { ...data, ...t, papers: toPapers(t.headers, t.rows, columns), roles: detectRoles(t.headers, columns) }
+}
+
+export function makeSnapshot(data, columns) {
+  const t = publicTable(data, columns)
+  return { syncedAt: new Date().toISOString(), fingerprint: fingerprint(t.headers, t.rows), scope: 'public-whitelist', headers: t.headers, rows: t.rows }
 }
 
 function fromSnapshot(snap, columns) {
@@ -385,14 +422,14 @@ function fromSnapshot(snap, columns) {
 
 // 관리자 브라우저: 실시간 데이터가 스냅샷과 다르면 papers.json을 자동 갱신 (세션당 지문별 1회)
 const syncing = new Set()
-async function autoSyncSnapshot(data) {
-  const snap = makeSnapshot(data)
+async function autoSyncSnapshot(data, columns) {
+  const snap = makeSnapshot(data, columns)
   const current = await loadSnapshot()
   if (current?.fingerprint === snap.fingerprint || syncing.has(snap.fingerprint)) return false
   syncing.add(snap.fingerprint)
   try {
     const { publishJSON } = await import('./publish.js')
-    await publishJSON(SNAPSHOT_PATH, snap, `radar: 공개 스냅샷 동기화 (${data.papers.length}편)`)
+    await publishJSON(SNAPSHOT_PATH, snap, `radar: 공개 스냅샷 동기화 (${snap.rows.length}편)`)
     snapPromise = Promise.resolve(snap)
     return true
   } catch (e) {
@@ -415,7 +452,7 @@ export function useRadarPapers(cfg, ready = true) {
   const canOAuth = isAdmin && g.connected && g.token?.sheets
   const [state, setState] = useState({ loading: false, error: '', data: null, source: '', synced: false })
   const [nonce, setNonce] = useState(0)
-  const key = JSON.stringify([mode, cfg?.sheetUrl, cfg?.sheetName, cfg?.apiKey, cfg?.columns, canOAuth, isAdmin])
+  const key = JSON.stringify([mode, cfg?.sheetUrl, cfg?.sheetName, cfg?.apiKey, cfg?.columns, cfg?.snapshotAutoSync, canOAuth, isAdmin])
 
   useEffect(() => {
     if (mode === 'sample') {
@@ -439,8 +476,11 @@ export function useRadarPapers(cfg, ready = true) {
       .then(async (data) => {
         live = true
         if (!alive) return
-        setState({ loading: false, error: '', data: { ...data, source: liveMode }, source: liveMode, synced: false })
-        if (isAdmin && (await autoSyncSnapshot(data)) && alive) setState((s) => ({ ...s, synced: true }))
+        // 방문자에게는 공개 허용 열·행만 (시트의 개인 메모·비공개 행은 화면에서도 제외)
+        const shown = isAdmin ? data : toPublicData(data, cfg.columns)
+        setState({ loading: false, error: '', data: { ...shown, source: liveMode }, source: liveMode, synced: false })
+        // 공개 스냅샷 자동 동기화는 Admin 설정에서 명시적으로 켰을 때만
+        if (isAdmin && cfg.snapshotAutoSync === true && (await autoSyncSnapshot(data, cfg.columns)) && alive) setState((s) => ({ ...s, synced: true }))
       })
       .catch(async (e) => {
         const snap = await snapP
@@ -467,10 +507,10 @@ export function useRadarPapers(cfg, ready = true) {
 }
 
 /** 관리자: 현재 데이터를 공개 스냅샷으로 즉시 커밋 */
-export async function publishSnapshot(data) {
-  const snap = makeSnapshot(data)
+export async function publishSnapshot(data, columns) {
+  const snap = makeSnapshot(data, columns)
   const { publishJSON } = await import('./publish.js')
-  await publishJSON(SNAPSHOT_PATH, snap, `radar: 공개 스냅샷 동기화 (${data.papers.length}편)`)
+  await publishJSON(SNAPSHOT_PATH, snap, `radar: 공개 스냅샷 동기화 (${snap.rows.length}편, 공개 열만)`)
   snapPromise = Promise.resolve(snap)
   return snap
 }

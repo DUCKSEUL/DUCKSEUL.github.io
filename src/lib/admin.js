@@ -1,4 +1,5 @@
-// 관리자 모드: GitHub Personal Access Token(PAT)을 이 브라우저의 localStorage에만 저장하고,
+// 관리자 모드: GitHub 토큰을 기본적으로 sessionStorage(탭·브라우저를 닫으면 자동 삭제)에만 보관하고,
+//   「이 브라우저에 로그인 유지」를 직접 선택한 경우에만 localStorage에 둡니다.
 // 저장소에 push 권한이 있는 토큰일 때만 글쓰기/수정/삭제/불러오기 UI를 보여 줍니다.
 // ※ 화면을 숨기는 것은 편의 기능일 뿐, 실제 쓰기 권한은 GitHub 토큰이 결정합니다.
 import { useSyncExternalStore } from 'react'
@@ -6,14 +7,43 @@ import { REPO, AUTH_URL } from '../config.js'
 import { disconnect as disconnectGoogle } from './google.js'
 
 const KEY = 'admin-gh-token'
+const REMEMBER_KEY = 'admin-gh-remember' // '1'이면 localStorage 보관을 사용자가 선택한 상태
 const NONCE_KEY = 'admin-gh-nonce'
 const API = 'https://api.github.com'
 
 function readToken() {
   try {
-    return localStorage.getItem(KEY) || ''
+    const s = sessionStorage.getItem(KEY)
+    if (s) return s
+    const l = localStorage.getItem(KEY)
+    if (!l) return ''
+    if (localStorage.getItem(REMEMBER_KEY) === '1') return l
+    // 예전 버전이 localStorage에 평문으로 남긴 토큰 → 이번 탭 세션으로 옮기고 영구 보관본은 삭제
+    sessionStorage.setItem(KEY, l)
+    localStorage.removeItem(KEY)
+    return l
   } catch {
     return ''
+  }
+}
+
+function storeToken(token, remember) {
+  sessionStorage.setItem(KEY, token)
+  if (remember) {
+    localStorage.setItem(KEY, token)
+    localStorage.setItem(REMEMBER_KEY, '1')
+  } else {
+    localStorage.removeItem(KEY)
+    localStorage.removeItem(REMEMBER_KEY)
+  }
+}
+
+/** 지금 토큰이 브라우저에 영구 보관 중인지 */
+export function isTokenRemembered() {
+  try {
+    return localStorage.getItem(REMEMBER_KEY) === '1' && !!localStorage.getItem(KEY)
+  } catch {
+    return false
   }
 }
 
@@ -114,7 +144,7 @@ async function verify(token) {
   return { login: user.login, avatar: user.avatar_url }
 }
 
-export async function login(token) {
+export async function login(token, { remember = false } = {}) {
   token = token.trim()
   if (!token) throw new Error('토큰을 입력해 주세요.')
   let user
@@ -126,9 +156,9 @@ export async function login(token) {
     throw e
   }
   try {
-    localStorage.setItem(KEY, token)
+    storeToken(token, remember)
   } catch {
-    throw new Error('이 브라우저에서는 localStorage를 쓸 수 없어요.')
+    throw new Error('이 브라우저에서는 토큰을 보관할 수 없어요. (저장소 접근 차단)')
   }
   setState({ status: 'admin', user, error: null })
   return user
@@ -136,8 +166,15 @@ export async function login(token) {
 
 export function logout() {
   disconnectGoogle() // 관리자 로그아웃 시 Google 토큰도 즉시 폐기
+  for (const store of [() => sessionStorage, () => localStorage]) {
+    try {
+      store().removeItem(KEY)
+    } catch {
+      /* ignore */
+    }
+  }
   try {
-    localStorage.removeItem(KEY)
+    localStorage.removeItem(REMEMBER_KEY)
   } catch {
     /* ignore */
   }

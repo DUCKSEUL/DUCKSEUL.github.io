@@ -6,6 +6,7 @@ import { REPO } from '../config.js'
 
 function TokenForm({ onDone }) {
   const [token, setToken] = useState('')
+  const [remember, setRemember] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -14,7 +15,7 @@ function TokenForm({ onDone }) {
     setBusy(true)
     setError('')
     try {
-      const user = await login(token)
+      const user = await login(token, { remember })
       toast(`관리자 모드가 켜졌어요. (${user.login})`)
       setToken('')
       onDone()
@@ -46,11 +47,16 @@ function TokenForm({ onDone }) {
           {error}
         </p>
       )}
+      <label className="check-row">
+        <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+        <span>이 브라우저에 로그인 유지 (공용 PC에서는 사용하지 마세요)</span>
+      </label>
       <p className="form-hint">
         <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">
           Fine-grained token
         </a>{' '}
-        · 이 저장소 + 비공개 글 저장소(기본 <code>duckseul-private-notes</code>) · Contents: Read and write. 토큰은 이 브라우저의 localStorage에만 저장돼요.
+        권장 설정: 저장소는 <code>{REPO.name}</code> + 비공개 글 저장소(기본 <code>duckseul-private-notes</code>)만, 권한은 <strong>Contents: Read and write</strong> 하나만, 만료는{' '}
+        <strong>7~30일</strong>처럼 짧게. 토큰은 기본적으로 이 탭에만 보관되고 탭·브라우저를 닫으면 자동으로 지워져요.
       </p>
       <button className="btn btn-md btn-primary" type="submit" disabled={busy || !token.trim()}>
         {busy ? '확인 중…' : '토큰으로 로그인'}
