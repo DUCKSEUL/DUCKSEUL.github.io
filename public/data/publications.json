@@ -1,6 +1,20 @@
 {
-  "updatedAt": "2026-11-24T08:46:24.841Z",
+  "updatedAt": "2026-11-24T08:53:36.117Z",
   "items": [
+    {
+      "id": "pub-mwugjjslq3r",
+      "type": "conference",
+      "year": 2026,
+      "title": "상호결합을 고려한 공진기 기반 투과형 메타표면 안테나",
+      "authors": "조민우, 김민석",
+      "venue": "",
+      "description": "",
+      "doi": "",
+      "pdf": "",
+      "code": "",
+      "url": "",
+      "highlight": false
+    },
     {
       "id": "pub-mwug26hvhmx",
       "type": "journal",
