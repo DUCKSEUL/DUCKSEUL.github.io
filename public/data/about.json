@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-24T07:25:42.931Z",
+  "updatedAt": "2026-11-24T07:26:06.638Z",
   "name": "DUCKSEUL",
   "affiliation": "",
   "status": "MATLAB 작업 중",
@@ -22,13 +22,13 @@
   "education": [
     {
       "period": "2019 - 2024",
-      "school": "홍익대학교 전자전기공학과",
+      "school": "홍익대학교 전자전기공학부",
       "degree": "학사 과정 졸업"
     },
     {
       "period": "2025 - 현재",
       "school": "홍익대학교 전자전기공학과",
-      "degree": "석박통합 과정"
+      "degree": "석박통합 과정 재학"
     }
   ],
   "interests": [
