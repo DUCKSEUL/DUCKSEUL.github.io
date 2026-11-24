@@ -1,6 +1,20 @@
 {
-  "updatedAt": "2026-11-24T08:05:59.049Z",
+  "updatedAt": "2026-11-24T08:40:05.731Z",
   "items": [
+    {
+      "id": "pub-mwug26hvhmx",
+      "type": "journal",
+      "year": 2026,
+      "title": "Loss-Optimized Reconfigurable Cavity-Excited Nonlocal Metasurface Antennas",
+      "authors": "Minwoo Cho, Minseok Kim",
+      "venue": "IEEE Transactions on Antennas and Propagation",
+      "description": "",
+      "doi": "",
+      "pdf": "",
+      "code": "",
+      "url": "",
+      "highlight": false
+    },
     {
       "id": "pj-pystudy",
       "type": "project",
