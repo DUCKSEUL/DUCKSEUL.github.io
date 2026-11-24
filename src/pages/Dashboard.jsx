@@ -6,7 +6,7 @@ import { useAdmin } from '../lib/admin.js'
 import { useSiteData } from '../lib/siteData.js'
 import { useEvents, eventsOn } from '../lib/useEvents.js'
 import { ymd } from '../lib/google.js'
-import { pubType, eventType, dday, safeUrl } from '../lib/labels.js'
+import { pubType, eventType, dday, safeUrl, pubDate, byPubDateDesc } from '../lib/labels.js'
 import { useRadarPapers, useSortedPapers, groupByDate, fmtGroupDate, BANDS } from '../lib/sheets.js'
 import { ProfileLinks } from './About.jsx'
 import { PubLinks } from './Publications.jsx'
@@ -73,7 +73,7 @@ function ProfileWidget() {
 /* 1행 우: 연구 실적 하이라이트 */
 function PubWidget() {
   const { data } = useSiteData('publications')
-  const items = data?.items || []
+  const items = [...(data?.items || [])].sort(byPubDateDesc)
   const list = [...items.filter((i) => i.highlight), ...items.filter((i) => !i.highlight)].slice(0, 4)
   const counts = ['journal', 'conference', 'patent', 'project'].map((t) => [pubType(t).label, items.filter((i) => i.type === t).length])
   return (
@@ -95,7 +95,7 @@ function PubWidget() {
                 <span className={`pub-badge t-${t.value}`}>{t.label}</span>
                 <div>
                   <strong>{i.title}</strong>
-                  <span>{[i.description || i.venue, i.year].filter(Boolean).join(' · ')}</span>
+                  <span>{[i.description || i.venue, pubDate(i)].filter(Boolean).join(' · ')}</span>
                 </div>
                 <PubLinks item={i} />
               </li>

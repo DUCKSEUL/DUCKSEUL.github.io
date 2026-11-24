@@ -55,9 +55,29 @@ export function toBibtex(item) {
     ['author', authors.map(bibEscape).join(' and ')],
     [venueField, bibEscape(item.venue)],
     ['year', item.year],
+    ['month', ['', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'][Number(item.month)] || ''],
     ['doi', bibEscape(doi)],
     ['url', item.url || item.pdf || item.code || (doi ? `https://doi.org/${doi}` : '')],
     ['note', item.type === 'patent' ? 'Patent' : ''],
   ].filter(([, v]) => v !== undefined && v !== null && String(v).trim() && String(v) !== '{}')
   return `@${type}{${key},\n${fields.map(([k, v]) => `  ${k} = {${v}}`).join(',\n')}\n}`
 }
+
+/* ── 연구 실적 날짜 (연도 + 선택적 월) ── */
+const monthOf = (item) => {
+  const m = Number(item?.month)
+  return Number.isInteger(m) && m >= 1 && m <= 12 ? m : 0
+}
+/** '2026. 10' (월이 없으면 '2026', 연도가 없으면 '') */
+export function pubDate(item) {
+  const y = Number(item?.year)
+  if (!y) return ''
+  const m = monthOf(item)
+  return m ? `${y}. ${String(m).padStart(2, '0')}` : String(y)
+}
+/** 최신순 정렬 비교 함수: 연도·월 내림차순. 같은 연도에서 월 미기재 항목은 월이 있는 항목 뒤, 연도 미기재는 맨 아래 */
+export function byPubDateDesc(a, b) {
+  const k = (i) => (Number(i?.year) || 0) * 100 + monthOf(i)
+  return k(b) - k(a)
+}
+export const MONTH_OPTIONS = [{ value: '', label: '월 선택 안 함' }, ...Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: `${i + 1}월` }))]

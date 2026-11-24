@@ -4,12 +4,13 @@ import { Icon, toast, useDocumentTitle } from '../components/ui.jsx'
 import FormModal from '../components/FormModal.jsx'
 import { useAdmin } from '../lib/admin.js'
 import { useSiteData, saveSiteData, newItemId } from '../lib/siteData.js'
-import { PUB_TYPES, pubType, safeUrl, doiUrl, toBibtex } from '../lib/labels.js'
+import { PUB_TYPES, pubType, safeUrl, doiUrl, toBibtex, pubDate, byPubDateDesc, MONTH_OPTIONS } from '../lib/labels.js'
 
 const ALL = 'all'
 const FIELDS = [
   { name: 'type', label: '분류', type: 'select', options: PUB_TYPES.map((t) => ({ value: t.value, label: `${t.label} · ${t.ko}` })) },
   { name: 'year', label: '연도', type: 'number', placeholder: '2026' },
+  { name: 'month', label: '월', type: 'select', options: MONTH_OPTIONS },
   { name: 'title', label: '제목', required: true, full: true },
   { name: 'authors', label: '저자', placeholder: 'D. Kim, ...', full: true },
   { name: 'venue', label: '저널 / 학회 / 특허번호 / 언어', full: true },
@@ -73,7 +74,7 @@ export default function Publications() {
   const tab = params.get('type') || ALL
   const [editing, setEditing] = useState(null) // null | {} (new) | item
 
-  const items = [...(data?.items || [])].sort((a, b) => (Number(b.year) || 0) - (Number(a.year) || 0))
+  const items = [...(data?.items || [])].sort(byPubDateDesc)
   const list = tab === ALL ? items : items.filter((i) => i.type === tab)
   const count = (t) => items.filter((i) => i.type === t).length
 
@@ -84,7 +85,7 @@ export default function Publications() {
   }
 
   const onSubmit = async (v) => {
-    const rec = { ...v, year: v.year ? Number(v.year) : '', title: v.title.trim() }
+    const rec = { ...v, year: v.year ? Number(v.year) : '', month: Number(v.month) || '', title: v.title.trim() }
     if (editing?.id) await persist(items.map((i) => (i.id === editing.id ? { ...i, ...rec } : i)), `publications: 「${rec.title}」 수정`)
     else await persist([{ id: newItemId('pub'), ...rec }, ...items], `publications: 「${rec.title}」 추가`)
   }
@@ -111,7 +112,7 @@ export default function Publications() {
             <p className="page-sub">저널 논문, 학술대회 발표, 특허, 코드와 프로젝트를 모았어요.</p>
           </div>
           {isAdmin && (
-            <button className="btn btn-md btn-primary" onClick={() => setEditing({ type: tab === ALL ? 'journal' : tab, year: new Date().getFullYear() })}>
+            <button className="btn btn-md btn-primary" onClick={() => setEditing({ type: tab === ALL ? 'journal' : tab, year: new Date().getFullYear(), month: String(new Date().getMonth() + 1) })}>
               <Icon name="plus" size={18} /> 실적 추가
             </button>
           )}
@@ -144,7 +145,7 @@ export default function Publications() {
                     <h3>{i.title}</h3>
                     {i.authors && <p className="pub-authors">{i.authors}</p>}
                     <p className="pub-venue">
-                      {[i.venue, i.year].filter(Boolean).join(' · ')}
+                      {[i.venue, pubDate(i)].filter(Boolean).join(' · ')}
                       {i.highlight && <em className="badge">Highlight</em>}
                     </p>
                     {i.description && <p className="pub-desc">{i.description}</p>}
@@ -166,7 +167,7 @@ export default function Publications() {
           <div className="empty">
             <p>{tab === ALL ? '아직 등록된 실적이 없어요.' : `등록된 ${pubType(tab).ko} 항목이 없어요.`}</p>
             {isAdmin && (
-              <button className="btn btn-md btn-weak" onClick={() => setEditing({ type: tab === ALL ? 'journal' : tab, year: new Date().getFullYear() })}>
+              <button className="btn btn-md btn-weak" onClick={() => setEditing({ type: tab === ALL ? 'journal' : tab, year: new Date().getFullYear(), month: String(new Date().getMonth() + 1) })}>
                 실적 추가
               </button>
             )}
