@@ -989,55 +989,6 @@
   background: var(--surface-2);
 }
 
-/* ── 홈: 소개 카드 「현재 연구 포커스」 ── */
-.w-focus {
-  margin-top: 16px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--blue) 7%, var(--surface)), color-mix(in srgb, var(--purple) 6%, var(--surface)));
-  border: 1px solid color-mix(in srgb, var(--blue) 14%, transparent);
-}
-.w-focus-title {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin: 0 0 8px;
-  color: var(--blue);
-  font-size: 0.76rem;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-}
-.w-focus ul {
-  display: grid;
-  gap: 7px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.w-focus li {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-.w-focus .area-dot {
-  margin-top: 6px;
-  flex: none;
-}
-.w-focus li div {
-  display: grid;
-  min-width: 0;
-}
-.w-focus strong {
-  color: var(--g800);
-  font-size: 0.88rem;
-  font-weight: 700;
-}
-.w-focus li span:not(.area-dot) {
-  color: var(--g600);
-  font-size: 0.78rem;
-  line-height: 1.45;
-}
-
 /* ── 홈: GitHub 잔디는 보조 위젯 — 컴팩트하게 ── */
 .bento .w-github {
   padding-top: 16px;
@@ -1104,19 +1055,6 @@ li.paper,
 .paper-sum,
 .paper-spec .spec-cem {
   color: var(--radar-sub);
-}
-/* 밀도 미세 조정: 포커스 박스는 컴팩트하게(설명 한 줄), 잔디는 가운데 정렬 */
-.w-focus {
-  margin-top: 14px;
-  padding: 10px 12px;
-}
-.w-focus ul {
-  gap: 5px;
-}
-.w-focus li span:not(.area-dot) {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .w-github .gh-wrap {
   display: flex;
