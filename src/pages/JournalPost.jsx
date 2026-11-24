@@ -178,7 +178,17 @@ export default function JournalPost() {
           </>
         )}
 
-        {isAdmin && post.draft && (
+        {isAdmin && post.source === 'private' && (
+          <p className="private-note is-locked" role="note">
+            <span className="lock-badge">🔒 나에게만 보기 (비공개)</span>
+            <span>
+              비공개 저장소에만 저장된 글이에요. 방문자에게는 목록에도 보이지 않아요.
+              {post.hasPublic && ' (이전 공개본이 아직 남아 있어요)'}
+            </span>
+            <Link to={`/write/${post.id}`}>공개 전환 · 수정</Link>
+          </p>
+        )}
+        {isAdmin && post.draft && post.source !== 'private' && (
           <p className="private-note" role="note">
             <Icon name="note" size={18} />
             {post.source === 'modified'

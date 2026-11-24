@@ -165,3 +165,12 @@ export function logout() {
     else setState({ status: 'guest' })
   }
 })()
+
+/** 관리자 상태 변화 구독 (React 밖의 저장소 모듈용) */
+export function onAdminChange(cb) {
+  listeners.add(cb)
+  return () => listeners.delete(cb)
+}
+export function getAdminState() {
+  return state
+}

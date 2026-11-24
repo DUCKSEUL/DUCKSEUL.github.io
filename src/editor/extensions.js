@@ -108,6 +108,18 @@ export const DIVIDERS = [
   { value: 'dots', label: '3점 장식선' },
 ]
 export const Divider = HorizontalRule.extend({
+  // 코어 키맵의 Mod-Enter(exitCode)보다 먼저 처리
+  priority: 1000,
+  addKeyboardShortcuts() {
+    return {
+      // Ctrl+Enter (macOS: Cmd+Enter): 커서 위치에 기본 구분선 + 바로 아래 새 줄로 커서 이동
+      'Mod-Enter': () => {
+        const ed = this.editor
+        if (ed.isActive('codeBlock')) return false // 코드 블록에서는 기존 동작(블록 빠져나오기)
+        return ed.chain().setHorizontalRule().run()
+      },
+    }
+  },
   addAttributes() {
     return {
       variant: {

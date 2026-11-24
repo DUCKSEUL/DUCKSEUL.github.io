@@ -8,7 +8,7 @@ import MathPopover from '../editor/MathPopover.jsx'
 import TableToolbar from '../editor/TableToolbar.jsx'
 import Modal from '../components/Modal.jsx'
 import { Icon, toast, useDocumentTitle } from '../components/ui.jsx'
-import { usePosts, savePost, newId, markSynced } from '../lib/store.js'
+import { usePosts, savePost, newId, markSynced, savePrivatePost, removePrivatePost, isPubliclyListed } from '../lib/store.js'
 import { useAdmin } from '../lib/admin.js'
 import AdminOnly from '../components/AdminOnly.jsx'
 import { saveDraft, loadDraft, clearDraft, relativeTime } from '../lib/drafts.js'
@@ -73,6 +73,12 @@ function EditorPage({ initial, categories }) {
   const [linkState, setLinkState] = useState(null)
   const [publishing, setPublishing] = useState(false)
   const [privateAt, setPrivateAt] = useState(null)
+  const [savingPrivate, setSavingPrivate] = useState(false)
+  // 공개 저장소에 올라가 있는 글을 비공개로 저장하려 할 때 선택 창
+  const [convert, setConvert] = useState(null)
+  const wasPrivate = initial?.source === 'private'
+  const onPublic = !!initial && isPubliclyListed(initial.id)
+  const visibility = wasPrivate || (initial?.draft && !onPublic) || !initial ? 'private' : 'public'
   const saveRef = useRef(null)
   const fileRef = useRef(null)
   const editorRef = useRef(null)
@@ -354,23 +360,57 @@ function EditorPage({ initial, categories }) {
     html: editor.getHTML(),
   })
 
-  // 저장: 이 브라우저에만, 관리자에게만 보임 (저장소는 public이라 커밋하지 않음)
-  const savePrivate = async (after) => {
-    if (!editorRef.current || publishing) return
-    try {
-      await savePost(buildPost(true))
-      await clearDraft(draftKey)
+  // 비공개 저장: 관리자 GitHub 계정의 private 저장소(private-posts.json)에 커밋 → 어느 기기에서든 Admin 로그인 시 보임
+  // unpublish: 공개 저장소의 글도 삭제(공개 → 비공개 전환). 공개본이 있는데 선택 전이면 선택 창을 띄움.
+  const savePrivate = async (after, { unpublish } = {}) => {
+    if (!editorRef.current || publishing || savingPrivate) return
+    if (unpublish === undefined && onPublic) {
+      setConvert({ after })
+      return
+    }
+    setConvert(null)
+    const post = buildPost(true)
+    const finish = () => {
       dirty.current = false
       markSaved()
       setPrivateAt(Date.now())
       if (typeof after === 'function') after()
-      else navigate('/journal')
-      toast(initial?.source === 'published' || initial?.source === 'modified' ? '저장했어요. 공개된 글은 발행 전까지 그대로예요.' : '저장했어요. 나에게만 보여요.')
-    } catch {
-      toast('저장 공간이 부족해 저장하지 못했어요. 백업 후 다시 시도해 주세요.', 'error')
+      else navigate(`/journal/${postId}`)
+    }
+    setSavingPrivate(true)
+    try {
+      const res = await savePrivatePost(post, { unpublish: !!unpublish })
+      await clearDraft(draftKey)
+      finish()
+      if (res.unpublishError) toast(`비공개 저장소에는 저장했지만 공개 글 삭제에 실패했어요: ${res.unpublishError}`, 'error')
+      else if (res.unpublished) toast('🔒 비공개로 전환했어요. 공개 저장소에서 삭제했고 1~2분 뒤 사이트에서도 사라져요.')
+      else toast('🔒 비공개 저장소에 저장했어요. 다른 기기에서도 Admin 로그인 시 보여요.')
+    } catch (e) {
+      console.warn(e)
+      // 비공개 저장소에 못 올렸으면 글이 사라지지 않도록 이 브라우저에 임시 보관
+      try {
+        await savePost(post)
+        await clearDraft(draftKey)
+        finish()
+        toast(`비공개 저장소 저장 실패: ${e.message} — 이 브라우저에만 임시로 저장했어요.`, 'error')
+      } catch {
+        toast('저장하지 못했어요. 백업 후 다시 시도해 주세요.', 'error')
+      }
+    } finally {
+      setSavingPrivate(false)
     }
   }
-  saveRef.current = savePrivate
+  // 공개 글을 수정하던 중 Ctrl+S: 공개 상태는 그대로 두고 즉시 임시저장만
+  const backupNow = async () => {
+    const ed = editorRef.current
+    if (!ed) return
+    const ts = Date.now()
+    await saveDraft(draftKey, { ...latest.current, html: ed.getHTML(), savedAt: ts })
+    dirty.current = false
+    setSavedAt(ts)
+    toast('임시저장했어요. 공개 글에는 「수정 발행」을 눌러야 반영돼요.')
+  }
+  saveRef.current = () => (visibility === 'public' ? backupNow() : savePrivate())
 
   const publish = async () => {
     if (!title.trim()) {
@@ -395,7 +435,15 @@ function EditorPage({ initial, categories }) {
       const { publishChanges } = await import('../lib/publish.js')
       await publishChanges({ upserts: [post] })
       await markSynced([post.id])
-      toast('GitHub에 발행했어요! 1~2분 뒤 모든 방문자에게 반영돼요.')
+      // 비공개 글을 공개로 전환: 비공개 저장소에서 제거
+      if (wasPrivate) {
+        try {
+          await removePrivatePost(post.id)
+        } catch (e) {
+          toast(`공개로 발행했지만 비공개 저장소에서 지우지 못했어요: ${e.message}`, 'error')
+        }
+      }
+      toast(wasPrivate ? '🌐 공개 게시로 전환했어요! 1~2분 뒤 모든 방문자에게 반영돼요.' : 'GitHub에 발행했어요! 1~2분 뒤 모든 방문자에게 반영돼요.')
     } catch (e) {
       console.warn(e)
       toast(`GitHub 발행 실패: ${e.message} — 이 브라우저에 저장해 두었어요. 목록에서 다시 발행할 수 있어요.`, 'error')
@@ -415,11 +463,20 @@ function EditorPage({ initial, categories }) {
             <Icon name="chevronLeft" size={18} /> <span className="hide-sm">{initial ? '글로 돌아가기' : '연구 일지'}</span>
           </Link>
           <SaveBadge savedAt={savedAt} saving={saving} privateAt={privateAt} />
-          <button className="btn btn-md btn-outline" onClick={() => savePrivate()} disabled={publishing} title="나만 보이게 저장하고 목록으로 (Ctrl+S)">
-            <Icon name="check" size={16} strokeWidth={2.5} /> 저장<span className="hide-sm btn-kbd">Ctrl+S</span>
+          <span className={`vis-pill ${visibility === 'private' ? 'is-private' : 'is-public'}`} title={visibility === 'private' ? '비공개 저장소에만 저장돼요' : '모든 방문자에게 공개된 글이에요'}>
+            {visibility === 'private' ? '🔒 나에게만 보기' : '🌐 공개 글'}
+          </span>
+          <button
+            className="btn btn-md btn-outline btn-private"
+            onClick={() => savePrivate()}
+            disabled={publishing || savingPrivate}
+            title={visibility === 'private' ? '비공개 저장소에 저장 (Ctrl+S)' : '공개를 거두고 비공개 저장소로 옮기기'}
+          >
+            <Icon name="lock" size={16} strokeWidth={2.2} /> {savingPrivate ? '저장 중…' : visibility === 'private' ? '비공개 유지 저장' : '비공개로 전환'}
+            {visibility === 'private' && <span className="hide-sm btn-kbd">Ctrl+S</span>}
           </button>
-          <button className="btn btn-md btn-primary" onClick={publish} disabled={publishing} title="모든 방문자에게 공개">
-            {publishing ? '발행 중…' : initial && initial.source !== 'local' ? '수정 발행' : '발행 (Publish)'}
+          <button className="btn btn-md btn-primary" onClick={publish} disabled={publishing || savingPrivate} title="모든 방문자에게 공개">
+            {publishing ? '발행 중…' : wasPrivate ? '공개 게시로 전환' : initial && initial.source !== 'local' && !initial.draft ? '수정 발행' : '공개 게시'}
           </button>
         </div>
         <div className="toolbar-wrap">
@@ -491,7 +548,7 @@ function EditorPage({ initial, categories }) {
             예상 읽기 시간 <strong data-testid="read-time">{counts.minutes}분</strong>
           </span>
           <span className="foot-keys hide-sm">
-            <kbd>Ctrl</kbd>+<kbd>S</kbd> 저장 · <kbd>Ctrl</kbd>+<kbd>E</kbd>/<kbd>L</kbd>/<kbd>R</kbd> 정렬 · <kbd>Alt</kbd>+<kbd>1</kbd>/<kbd>2</kbd> 사진 크기 · <kbd>Alt</kbd>+<kbd>3</kbd> 수식
+            <kbd>Ctrl</kbd>+<kbd>S</kbd> 저장 · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> 구분선 · <kbd>Ctrl</kbd>+<kbd>E</kbd>/<kbd>L</kbd>/<kbd>R</kbd> 정렬 · <kbd>Alt</kbd>+<kbd>1</kbd>/<kbd>2</kbd> 사진 크기 · <kbd>Alt</kbd>+<kbd>3</kbd> 수식
           </span>
         </div>
       </div>
@@ -533,16 +590,67 @@ function EditorPage({ initial, categories }) {
             <button className="btn btn-md btn-ghost" onClick={() => blocker.reset?.()}>
               계속 쓰기
             </button>
-            <button className="btn btn-md btn-primary" autoFocus onClick={() => savePrivate(() => blocker.proceed?.())}>
-              저장하고 나가기
+            {visibility === 'private' ? (
+              <button className="btn btn-md btn-primary" autoFocus onClick={() => savePrivate(() => blocker.proceed?.())}>
+                비공개 저장하고 나가기
+              </button>
+            ) : (
+              <button
+                className="btn btn-md btn-primary"
+                autoFocus
+                onClick={async () => {
+                  await backupNow()
+                  markSaved()
+                  blocker.proceed?.()
+                }}
+              >
+                임시저장하고 나가기
+              </button>
+            )}
+          </>
+        }
+      >
+        <p className="modal-text">
+          저장하지 않은 내용이 있어요.{' '}
+          {visibility === 'private' ? (
+            <>
+              나가기 전에 <strong>🔒 비공개 저장소</strong>에 저장할까요?
+            </>
+          ) : (
+            <>
+              공개 글은 그대로 두고 <strong>임시저장</strong>해 둘까요? (다음에 이어서 쓸 수 있어요)
+            </>
+          )}
+          <br />
+          저장하지 않고 나가면 이번에 쓴 내용은 사라져요.
+        </p>
+      </Modal>
+
+      <Modal
+        open={!!convert}
+        title="공개된 글이에요"
+        onClose={() => setConvert(null)}
+        width={480}
+        footer={
+          <>
+            <button className="btn btn-md btn-ghost" onClick={() => setConvert(null)}>
+              취소
+            </button>
+            <button className="btn btn-md btn-ghost" onClick={() => savePrivate(convert?.after, { unpublish: false })}>
+              공개본은 그대로 두기
+            </button>
+            <button className="btn btn-md btn-primary" autoFocus onClick={() => savePrivate(convert?.after, { unpublish: true })}>
+              🔒 비공개로 전환
             </button>
           </>
         }
       >
         <p className="modal-text">
-          저장하지 않은 내용이 있어요. 나가기 전에 <strong>나만 보기</strong>로 저장할까요?
+          이 글은 지금 모든 방문자에게 공개되어 있어요.
           <br />
-          저장하지 않고 나가면 이번에 쓴 내용은 사라져요.
+          <strong>비공개로 전환</strong>하면 공개 저장소에서 삭제되고 비공개 저장소로 옮겨져요.
+          <br />
+          <strong>공개본은 그대로 두기</strong>를 고르면 방문자에게는 이전 공개본이 계속 보이고, 지금 내용은 나에게만 보이는 수정본으로 저장돼요.
         </p>
       </Modal>
 

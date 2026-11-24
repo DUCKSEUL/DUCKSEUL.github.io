@@ -50,7 +50,7 @@ function TokenForm({ onDone }) {
         <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">
           Fine-grained token
         </a>{' '}
-        · 이 저장소만 · Contents: Read and write. 토큰은 이 브라우저의 localStorage에만 저장돼요.
+        · 이 저장소 + 비공개 글 저장소(기본 <code>duckseul-private-notes</code>) · Contents: Read and write. 토큰은 이 브라우저의 localStorage에만 저장돼요.
       </p>
       <button className="btn btn-md btn-primary" type="submit" disabled={busy || !token.trim()}>
         {busy ? '확인 중…' : '토큰으로 로그인'}

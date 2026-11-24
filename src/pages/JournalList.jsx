@@ -4,6 +4,7 @@ import { Icon, toast, useDocumentTitle } from '../components/ui.jsx'
 import PostListItem from '../components/PostListItem.jsx'
 import Modal from '../components/Modal.jsx'
 import BackToTop from '../components/BackToTop.jsx'
+import PrivateRepoPanel from '../components/PrivateRepoPanel.jsx'
 import { usePosts, importPosts, getPendingChanges, markSynced, postText } from '../lib/store.js'
 import { removePost, deleteMessage } from '../lib/removePost.js'
 import { useAdmin } from '../lib/admin.js'
@@ -84,6 +85,8 @@ export default function JournalList() {
             </div>
           )}
         </header>
+
+        {isAdmin && <PrivateRepoPanel />}
 
         {pendingCount > 0 && (
           <div className="publish-bar" role="status">

@@ -6,12 +6,21 @@ export default function PostListItem({ post, onDelete }) {
   const thumb = postThumb(post.html)
   const summary = postText(post.html)
   return (
-    <div className="post-row">
+    <div className={`post-row ${post.source === 'private' ? 'is-private' : ''}`}>
       <Link to={`/journal/${post.id}`} className="post-item">
         <div className="post-item-body">
           <p className="post-item-cat">
             <span>{post.category || '연구 노트'}</span>
-            {post.draft && <em className="badge private">{post.source === 'modified' ? '나만 보기 · 공개본 있음' : '나만 보기'}</em>}
+            {post.source === 'private' && (
+              <em className="lock-badge" title="비공개 저장소에 저장된 글 · 나에게만 보여요">
+                🔒 나에게만 보기 (비공개){post.hasPublic && <span> · 공개본 있음</span>}
+              </em>
+            )}
+            {post.draft && post.source !== 'private' && (
+              <em className="badge private" title="이 브라우저에만 저장된 글">
+                {post.source === 'modified' ? '이 브라우저에만 · 공개본 있음' : '이 브라우저에만 저장'}
+              </em>
+            )}
             {post.source === 'local' && !post.draft && <em className="badge warn">발행 전</em>}
             {post.source === 'modified' && !post.draft && <em className="badge warn">발행 전 수정본</em>}
             {post.source === 'syncing' && <em className="badge sync">배포 대기</em>}

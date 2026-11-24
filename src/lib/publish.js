@@ -29,7 +29,7 @@ async function extractImages(html, images) {
 
 const imageNames = (html = '') => [...html.matchAll(SITE_IMG)].map((m) => m[1].slice(IMAGE_URL.length + 1))
 
-const clean = ({ source, syncedAt, ...p }) => p // eslint-disable-line no-unused-vars
+const clean = ({ source, syncedAt, private: _private, hasPublic, ...p }) => p // eslint-disable-line no-unused-vars
 
 async function listDir(path, ref) {
   try {

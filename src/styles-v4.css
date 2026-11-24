@@ -548,3 +548,81 @@
   place-items: center;
   width: 16px;
 }
+
+/* ── 나에게만 보기(비공개 저장소) ───────────────── */
+.lock-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--purple) 28%, transparent);
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--purple-weak), color-mix(in srgb, var(--purple-weak) 60%, var(--surface)));
+  color: var(--purple);
+  font-size: 0.74rem;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.lock-badge span {
+  font-weight: 600;
+  opacity: 0.8;
+}
+.post-row.is-private .post-item {
+  padding-left: 14px;
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--purple) 70%, transparent);
+}
+.private-note.is-locked {
+  flex-wrap: wrap;
+  border: 1px solid color-mix(in srgb, var(--purple) 22%, transparent);
+}
+.private-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px dashed color-mix(in srgb, var(--purple) 35%, transparent);
+  font-size: 0.86rem;
+  color: var(--g600);
+}
+.private-bar-text {
+  flex: 1;
+  min-width: 0;
+}
+.private-bar.is-error .private-bar-text {
+  color: var(--red, #e5484d);
+}
+.private-migrate {
+  border-color: color-mix(in srgb, var(--purple) 30%, transparent);
+}
+.vis-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.vis-pill.is-private {
+  background: var(--purple-weak);
+  color: var(--purple);
+}
+.vis-pill.is-public {
+  background: var(--blue-weak, #e8f1ff);
+  color: var(--blue);
+}
+.form-row-end {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+@media (max-width: 640px) {
+  .vis-pill {
+    display: none;
+  }
+}
