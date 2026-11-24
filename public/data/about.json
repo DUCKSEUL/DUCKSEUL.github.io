@@ -1,9 +1,9 @@
 {
-  "updatedAt": "2026-11-24T05:47:41.025Z",
+  "updatedAt": "2026-11-24T05:48:08.541Z",
   "name": "DUCKSEUL",
-  "affiliation": "Computational Electromagnetics Lab",
-  "status": "3D IE-MoM 솔버 고도화 중",
-  "tagline": "전자기 문제를 수치적으로 풀고, 그 과정을 코드와 일지로 남깁니다.",
+  "affiliation": "",
+  "status": "",
+  "tagline": "",
   "areas": [
     "Method of Moments",
     "Integral Equation",
