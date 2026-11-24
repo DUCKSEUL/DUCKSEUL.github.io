@@ -5,6 +5,7 @@ import PostListItem from '../components/PostListItem.jsx'
 import Modal from '../components/Modal.jsx'
 import BackToTop from '../components/BackToTop.jsx'
 import { usePosts, importPosts, getPendingChanges, markSynced } from '../lib/store.js'
+import { removePost, deleteMessage } from '../lib/removePost.js'
 import { useAdmin } from '../lib/admin.js'
 import { profile } from '../data/profile.js'
 
@@ -20,6 +21,7 @@ export default function JournalList() {
   const fileRef = useRef(null)
   const { isAdmin } = useAdmin()
   const [publishing, setPublishing] = useState(false)
+  const [toDelete, setToDelete] = useState(null)
   const pending = isAdmin ? getPendingChanges() : { upserts: [], deletes: [] }
   const pendingCount = pending.upserts.length + pending.deletes.length
 
@@ -104,7 +106,7 @@ export default function JournalList() {
         {list.length ? (
           <div className="post-items">
             {list.map((p) => (
-              <PostListItem key={p.id} post={p} />
+              <PostListItem key={p.id} post={p} onDelete={isAdmin ? setToDelete : undefined} />
             ))}
           </div>
         ) : (
@@ -120,6 +122,39 @@ export default function JournalList() {
       </div>
 
       <BackToTop />
+      <Modal
+        open={isAdmin && !!toDelete}
+        title="이 글을 삭제할까요?"
+        onClose={() => setToDelete(null)}
+        width={420}
+        footer={
+          <>
+            <button className="btn btn-md btn-ghost" onClick={() => setToDelete(null)}>
+              취소
+            </button>
+            <button
+              className="btn btn-md btn-danger"
+              autoFocus
+              onClick={() => {
+                const target = toDelete
+                setToDelete(null)
+                removePost(target)
+              }}
+            >
+              삭제
+            </button>
+          </>
+        }
+      >
+        {toDelete && (
+          <>
+            <p className="modal-text">
+              <strong>「{toDelete.title}」</strong>
+            </p>
+            <p className="modal-text">{deleteMessage(toDelete)}</p>
+          </>
+        )}
+      </Modal>
       <Modal open={isAdmin && backupOpen} title="일지 백업 · 불러오기" onClose={() => setBackupOpen(false)} width={520}>
         <div className="backup">
           <p className="backup-note">

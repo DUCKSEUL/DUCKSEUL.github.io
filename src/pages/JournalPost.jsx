@@ -6,7 +6,8 @@ import { Icon, toast, useDocumentTitle } from '../components/ui.jsx'
 import Lightbox from '../components/Lightbox.jsx'
 import Modal from '../components/Modal.jsx'
 import BackToTop from '../components/BackToTop.jsx'
-import { usePosts, deletePost, markSynced, formatDateTime } from '../lib/store.js'
+import { usePosts, formatDateTime } from '../lib/store.js'
+import { removePost, deleteMessage } from '../lib/removePost.js'
 import { useAdmin } from '../lib/admin.js'
 import { renderMathIn } from '../lib/math.js'
 import NotFound from './NotFound.jsx'
@@ -227,19 +228,9 @@ export default function JournalPost() {
               disabled={deleting}
               onClick={async () => {
                 setDeleting(true)
-                const { id, title } = post
-                const wasPublished = await deletePost(id)
+                const target = post
                 navigate('/journal')
-                if (!wasPublished) return toast('삭제했어요.')
-                toast('GitHub에 삭제를 반영하는 중…')
-                try {
-                  const { publishChanges } = await import('../lib/publish.js')
-                  await publishChanges({ deletes: [id], message: `journal: 「${title}」 삭제` })
-                  await markSynced([id])
-                  toast('GitHub에서 삭제했어요. 1~2분 뒤 사이트에 반영돼요.')
-                } catch (e) {
-                  toast(`GitHub 반영 실패: ${e.message} — 목록에서 다시 발행할 수 있어요.`, 'error')
-                }
+                await removePost(target)
               }}
             >
               {deleting ? '삭제 중…' : '삭제'}
@@ -247,11 +238,7 @@ export default function JournalPost() {
           </>
         }
       >
-        <p className="modal-text">
-          {post.source === 'local'
-            ? '아직 발행하지 않은 글이에요. 이 브라우저에서 삭제되고 되돌릴 수 없어요.'
-            : 'GitHub 저장소의 posts.json에서 이 글을 지우는 커밋을 올려요. 배포가 끝나면 모든 방문자에게서 사라져요.'}
-        </p>
+        <p className="modal-text">{deleteMessage(post)}</p>
       </Modal>
     </article>
   )

@@ -119,14 +119,20 @@ export async function savePost(post) {
   await persist()
 }
 
-/** 공개 글이면 삭제 표시를 남기고(발행 필요) true, 로컬에만 있던 글이면 바로 지우고 false */
+/** 저장소에 올라가 있는(또는 커밋 후 배포 대기 중인) 글인지 */
+export function isOnRemote(id) {
+  const rec = local.find((p) => p.id === id)
+  return publishedIds.has(id) || !!(rec && rec.syncedAt && !rec.deleted)
+}
+
+/** 저장소에 있는 글이면 삭제 표시를 남기고(발행 필요) true, 로컬에만 있던 글이면 바로 지우고 false */
 export async function deletePost(id) {
+  const remote = isOnRemote(id)
   local = local.filter((p) => p.id !== id)
-  const isPublished = publishedIds.has(id)
-  if (isPublished) local.push({ id, deleted: true, updatedAt: new Date().toISOString() })
+  if (remote) local.push({ id, deleted: true, remote: true, updatedAt: new Date().toISOString() })
   emit()
   await persist()
-  return isPublished
+  return remote
 }
 
 /** GitHub에 아직 발행하지 않은 로컬 변경사항 */
@@ -134,7 +140,7 @@ export function getPendingChanges() {
   const pending = local.filter((p) => !p.syncedAt)
   return {
     upserts: pending.filter((p) => !p.deleted && !p.draft),
-    deletes: pending.filter((p) => p.deleted && publishedIds.has(p.id)).map((p) => p.id),
+    deletes: pending.filter((p) => p.deleted && (p.remote || publishedIds.has(p.id))).map((p) => p.id),
   }
 }
 
