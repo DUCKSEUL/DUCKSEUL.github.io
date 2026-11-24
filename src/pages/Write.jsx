@@ -14,6 +14,7 @@ import AdminOnly from '../components/AdminOnly.jsx'
 import { saveDraft, loadDraft, clearDraft, relativeTime } from '../lib/drafts.js'
 import { fileToDataUrl, imageFiles } from '../lib/image.js'
 import NotFound from './NotFound.jsx'
+import { JOURNAL_CATS } from '../lib/labels.js'
 
 const AUTOSAVE_MS = 2000
 
@@ -455,7 +456,7 @@ function EditorPage({ initial, categories }) {
             placeholder="카테고리"
           />
           <datalist id="category-list">
-            {[...new Set(['연구 노트', '실험 기록', '논문 리뷰', '아이디어', ...categories])].map((c) => (
+            {[...new Set([...JOURNAL_CATS, '실험 기록', '아이디어', ...categories])].map((c) => (
               <option key={c} value={c} />
             ))}
           </datalist>

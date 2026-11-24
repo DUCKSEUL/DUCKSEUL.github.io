@@ -70,10 +70,10 @@ export function useSiteData(name) {
 }
 
 /** 관리자: 데이터 저장 → 저장소 커밋 */
-export async function saveSiteData(name, data, message) {
+export async function saveSiteData(name, data, message, extraFiles = []) {
   const next = { ...data, updatedAt: new Date().toISOString() }
-  const { publishJSON } = await import('./publish.js')
-  await publishJSON(`public/data/${name}.json`, next, message || `site: ${name}.json 업데이트`)
+  const { publishFiles } = await import('./publish.js')
+  await publishFiles([{ path: `public/data/${name}.json`, data: next }, ...extraFiles], message || `site: ${name}.json 업데이트`)
   try {
     localStorage.setItem(PENDING(name), JSON.stringify(next))
   } catch {

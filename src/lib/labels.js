@@ -32,3 +32,32 @@ export function dday(dateStr, today = new Date()) {
 
 export const safeUrl = (u) => (/^https?:\/\//i.test(u || '') ? u : '')
 export const doiUrl = (doi) => (!doi ? '' : /^https?:\/\//i.test(doi) ? doi : `https://doi.org/${doi.replace(/^doi:\s*/i, '')}`)
+
+// 연구 일지 기본 카테고리 (목록 필터 칩 · 글쓰기 추천)
+export const JOURNAL_CATS = ['연구 노트', '논문 리뷰', '시뮬레이션', '공지']
+
+/* ── 연구 실적 → BibTeX ── */
+const BIB_TYPE = { journal: 'article', conference: 'inproceedings', patent: 'misc', project: 'misc' }
+const bibEscape = (s) => String(s ?? '').replace(/([&%$#_{}])/g, '\\$1').trim()
+export function toBibtex(item) {
+  const authors = String(item.authors || '')
+    .split(/\s*(?:,|;|\band\b|&)\s*/i)
+    .map((a) => a.trim())
+    .filter(Boolean)
+  const last = (authors[0] || 'anon').split(/\s+/).pop().replace(/[^a-z]/gi, '').toLowerCase() || 'anon'
+  const word = (String(item.title || '').match(/[a-z]{4,}/i)?.[0] || 'paper').toLowerCase()
+  const key = `${last}${item.year || ''}${word}`
+  const type = BIB_TYPE[item.type] || 'misc'
+  const doi = String(item.doi || '').replace(/^https?:\/\/(dx\.)?doi\.org\//i, '').replace(/^doi:\s*/i, '')
+  const venueField = type === 'article' ? 'journal' : type === 'inproceedings' ? 'booktitle' : 'howpublished'
+  const fields = [
+    ['title', `{${bibEscape(item.title)}}`],
+    ['author', authors.map(bibEscape).join(' and ')],
+    [venueField, bibEscape(item.venue)],
+    ['year', item.year],
+    ['doi', bibEscape(doi)],
+    ['url', item.url || item.pdf || item.code || (doi ? `https://doi.org/${doi}` : '')],
+    ['note', item.type === 'patent' ? 'Patent' : ''],
+  ].filter(([, v]) => v !== undefined && v !== null && String(v).trim() && String(v) !== '{}')
+  return `@${type}{${key},\n${fields.map(([k, v]) => `  ${k} = {${v}}`).join(',\n')}\n}`
+}

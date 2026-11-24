@@ -4,7 +4,7 @@ import { Icon, toast, useDocumentTitle } from '../components/ui.jsx'
 import FormModal from '../components/FormModal.jsx'
 import { useAdmin } from '../lib/admin.js'
 import { useSiteData, saveSiteData, newItemId } from '../lib/siteData.js'
-import { PUB_TYPES, pubType, safeUrl, doiUrl } from '../lib/labels.js'
+import { PUB_TYPES, pubType, safeUrl, doiUrl, toBibtex } from '../lib/labels.js'
 
 const ALL = 'all'
 const FIELDS = [
@@ -37,6 +37,31 @@ export function PubLinks({ item }) {
         </a>
       ))}
     </span>
+  )
+}
+
+function BibtexButton({ item }) {
+  const [done, setDone] = useState(false)
+  const copy = async () => {
+    const text = toBibtex(item)
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      // 클립보드 API를 못 쓰는 환경: 임시 textarea로 복사
+      const ta = Object.assign(document.createElement('textarea'), { value: text })
+      document.body.append(ta)
+      ta.select()
+      document.execCommand('copy')
+      ta.remove()
+    }
+    setDone(true)
+    toast('BibTeX를 복사했어요.')
+    setTimeout(() => setDone(false), 1600)
+  }
+  return (
+    <button className={`bib-btn ${done ? 'is-done' : ''}`} onClick={copy} aria-label={`「${item.title}」 BibTeX 복사`}>
+      <Icon name={done ? 'check' : 'copy'} size={12} /> {done ? '복사됨' : 'BibTeX'}
+    </button>
   )
 }
 
@@ -123,7 +148,10 @@ export default function Publications() {
                       {i.highlight && <em className="badge">Highlight</em>}
                     </p>
                     {i.description && <p className="pub-desc">{i.description}</p>}
-                    <PubLinks item={i} />
+                    <div className="pub-actions">
+                      <PubLinks item={i} />
+                      <BibtexButton item={i} />
+                    </div>
                   </div>
                   {isAdmin && (
                     <button className="icon-btn" onClick={() => setEditing(i)} aria-label={`「${i.title}」 수정`}>

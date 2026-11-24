@@ -76,8 +76,13 @@ async function withRetry(fn) {
 
 /** JSON 파일 하나를 저장소에 커밋 (내 소개·연구 실적·공개 일정·논문 레이더 등) */
 export function publishJSON(path, data, message) {
-  const content = JSON.stringify(data, null, 2) + '\n'
-  return withRetry(() => commit(async () => ({ tree: [{ path, mode: '100644', type: 'blob', content }], result: {} }), message))
+  return publishFiles([{ path, data }], message)
+}
+
+/** 여러 JSON 파일을 커밋 1개로 저장 (예: radar.json + papers.json 스냅샷) */
+export function publishFiles(files, message) {
+  const tree = files.map(({ path, data }) => ({ path, mode: '100644', type: 'blob', content: JSON.stringify(data, null, 2) + '\n' }))
+  return withRetry(() => commit(async () => ({ tree, result: {} }), message))
 }
 
 async function attempt({ upserts, deletes, message }) {

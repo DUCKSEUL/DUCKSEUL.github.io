@@ -132,11 +132,11 @@ export default function JournalPost() {
               {post.updatedAt && post.updatedAt !== post.createdAt && <span>· 수정 {formatDateTime(post.updatedAt)}</span>}
             </p>
             <div className="post-actions">
-              <button className="btn btn-sm btn-naver" onClick={copyNaver} disabled={copying}>
-                <Icon name="copy" size={16} /> {copying ? '변환 중…' : '네이버 블로그용 복사'}
-              </button>
               {isAdmin && (
                 <>
+                  <button className="btn btn-sm btn-naver" onClick={copyNaver} disabled={copying}>
+                    <Icon name="copy" size={16} /> {copying ? '변환 중…' : '네이버 블로그용 복사'}
+                  </button>
                   <Link className="btn btn-sm btn-ghost" to={`/write/${post.id}`}>
                     <Icon name="pen" size={16} /> 수정
                   </Link>
@@ -193,16 +193,22 @@ export default function JournalPost() {
         <nav className="post-nav" aria-label="다른 일지">
           {older ? (
             <Link to={`/journal/${older.id}`} className="post-nav-item">
-              <span>이전 글</span>
+              <span>
+                <Icon name="chevronLeft" size={14} /> 이전 글 · {older.category || '연구 노트'}
+              </span>
               <strong>{older.title}</strong>
+              <small>{formatDateTime(older.createdAt, false)}</small>
             </Link>
           ) : (
             <span />
           )}
           {newer ? (
             <Link to={`/journal/${newer.id}`} className="post-nav-item next">
-              <span>다음 글</span>
+              <span>
+                {newer.category || '연구 노트'} · 다음 글 <Icon name="chevron" size={14} />
+              </span>
               <strong>{newer.title}</strong>
+              <small>{formatDateTime(newer.createdAt, false)}</small>
             </Link>
           ) : (
             <span />

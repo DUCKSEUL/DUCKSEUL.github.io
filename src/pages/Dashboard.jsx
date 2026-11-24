@@ -7,7 +7,7 @@ import { useSiteData } from '../lib/siteData.js'
 import { useEvents, eventsOn } from '../lib/useEvents.js'
 import { ymd } from '../lib/google.js'
 import { pubType, eventType, dday, safeUrl } from '../lib/labels.js'
-import { useRadarPapers, useSortedPapers } from '../lib/sheets.js'
+import { useRadarPapers, useSortedPapers, groupByDate, fmtGroupDate, BANDS } from '../lib/sheets.js'
 import { ProfileLinks } from './About.jsx'
 import { PubLinks } from './Publications.jsx'
 
@@ -234,24 +234,56 @@ function RadarWidget() {
   const { data: radar, ready } = useSiteData('radar')
   const sheet = useRadarPapers(radar, ready)
   const list = useSortedPapers(sheet.data, 'newest').slice(0, 4)
+  const groups = groupByDate(list)
   return (
     <Widget area="radar" title="논문 레이더" icon="radar" to="/radar">
       {sheet.sample && <p className="w-sample">샘플 데이터 · Google Sheets 연결 전</p>}
-      {sheet.needsAuth ? (
-        <p className="w-empty">비공개 시트와 연결되어 있어 관리자만 볼 수 있어요.</p>
-      ) : sheet.error ? (
-        <p className="w-empty">{sheet.error}</p>
-      ) : sheet.loading && !sheet.data ? (
+      {sheet.loading && !sheet.data ? (
         <div className="w-skel" />
+      ) : !sheet.data ? (
+        <p className="w-empty">{sheet.isAdmin && sheet.error ? sheet.error : '논문 목록을 준비하고 있어요.'}</p>
       ) : list.length ? (
-        <ol className="w-papers">
-          {list.map((p) => (
-            <li key={p.id}>
+        <div className="w-paper-groups">
+          {groups.map((g) => (
+            <section key={g.date || 'none'} className="w-paper-group">
+              <h3 className="w-date-head">
+                <time dateTime={g.date || undefined}>{fmtGroupDate(g.date)}</time>
+                <span>{g.papers.length}편</span>
+              </h3>
+              <ol className="w-papers">
+                {g.papers.map((p) => (
+                  <WidgetPaper key={p.id} p={p} />
+                ))}
+              </ol>
+            </section>
+          ))}
+        </div>
+      ) : (
+        <p className="w-empty">시트에 논문이 없어요.</p>
+      )}
+    </Widget>
+  )
+}
+
+function WidgetPaper({ p }) {
+  return (
+            <li>
               <a href={p.link || undefined} target="_blank" rel="noreferrer" className={p.link ? '' : 'no-link'}>
-                <span className="w-paper-meta">
-                  <span className="date-badge">{p.date ? p.date.replace(/-/g, '.') : '날짜 없음'}</span>
-                  {p.important && <em className="hl-badge">★ 중요</em>}
-                </span>
+                {(p.important || p.bands.length > 0 || p.methods.length > 0) && (
+                  <span className="w-paper-meta">
+                    {p.important && <em className="hl-badge">★ 중요</em>}
+                    {p.bands.slice(0, 2).map((b) => (
+                      <span key={b} className={`spec-band band-${b}`}>
+                        {BANDS.find((x) => x.key === b)?.label}
+                      </span>
+                    ))}
+                    {p.methods.slice(0, 2).map((m) => (
+                      <span key={m} className="spec-cem">
+                        {m}
+                      </span>
+                    ))}
+                  </span>
+                )}
                 <strong>
                   {p.title}
                   {p.link && <Icon name="external" size={12} />}
@@ -271,12 +303,6 @@ function RadarWidget() {
                 )}
               </a>
             </li>
-          ))}
-        </ol>
-      ) : (
-        <p className="w-empty">시트에 논문이 없어요.</p>
-      )}
-    </Widget>
   )
 }
 

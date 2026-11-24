@@ -4,14 +4,14 @@ import { Icon, toast } from './ui.jsx'
 import { ClientIdField } from './GoogleConnect.jsx'
 import { useGoogle, connect } from '../lib/google.js'
 import { saveSiteData } from '../lib/siteData.js'
-import { fetchSheet, parseSheetUrl, ROLE_DEFS } from '../lib/sheets.js'
+import { fetchSheet, parseSheetUrl, ROLE_DEFS, makeSnapshot, SNAPSHOT_PATH } from '../lib/sheets.js'
 import { API_KEY_REFERRERS, GOOGLE_ALLOWED_ORIGINS, SHEETS_SCOPE } from '../config.js'
 
 const MODES = [
   { value: 'sample', label: '샘플 데이터', desc: '연결 전 기본 예시' },
   { value: 'gviz', label: '링크 공유 시트', desc: '키 없이 · 「링크가 있는 모든 사용자」 공유' },
   { value: 'apikey', label: 'Sheets API · API Key', desc: '공개 시트 · 제한된 브라우저 키' },
-  { value: 'oauth', label: 'Sheets API · OAuth', desc: '비공개 시트 · 관리자 브라우저에서만' },
+  { value: 'oauth', label: 'Sheets API · OAuth', desc: '비공개 시트 · 방문자에게는 공개 스냅샷' },
 ]
 
 export function SecurityLockGuide() {
@@ -121,6 +121,7 @@ export default function RadarSettings({ open, onClose, radar }) {
   const save = async () => {
     setError('')
     let next
+    let extra = []
     if (cfg.mode === 'sample') next = { ...radar, mode: 'sample', sheetUrl: '', sheetName: '', apiKey: '', columns: {} }
     else {
       const d = await runTest()
@@ -135,10 +136,12 @@ export default function RadarSettings({ open, onClose, radar }) {
         apiKey: cfg.mode === 'apikey' ? cfg.apiKey.trim() : '', // OAuth/gviz 모드에서는 키를 남기지 않음
         columns,
       }
+      // 방문자용 공개 스냅샷도 같은 커밋에 저장 (비공개 시트여도 방문자 화면이 비지 않도록)
+      extra = [{ path: SNAPSHOT_PATH, data: makeSnapshot(d) }]
     }
     setBusy('save')
     try {
-      await saveSiteData('radar', next, `radar: 데이터 소스 ${next.mode} 설정`)
+      await saveSiteData('radar', next, `radar: 데이터 소스 ${next.mode} 설정 + 공개 스냅샷`, extra)
       toast('논문 레이더 설정을 저장했어요. 1~2분 뒤 모든 방문자에게 반영돼요.')
       onClose()
     } catch (e) {
@@ -215,7 +218,7 @@ export default function RadarSettings({ open, onClose, radar }) {
                 <span>
                   {oauthReady
                     ? `${new Date(g.token.expiresAt).toTimeString().slice(0, 5)}까지 유효 · 이 탭에만 보관`
-                    : '비공개 시트는 관리자 브라우저에서만 보여요. 방문자에게는 공개되지 않아요.'}
+                    : '저장할 때 시트 내용이 공개 스냅샷(papers.json)으로 함께 커밋돼 방문자에게도 보여요.'}
                 </span>
               </div>
               {!oauthReady && (

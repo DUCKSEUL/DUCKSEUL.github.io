@@ -1,0 +1,474 @@
+/* ═══════════════════════════════════════════
+   v4: 논문 레이더 주파수·CEM 필터 · 날짜 그룹 헤더 ·
+   연구 일지 검색 · BibTeX · 다크모드 대비 보정
+   ═══════════════════════════════════════════ */
+
+/* 대역별 파스텔 톤 (라이트) — 낮은 주파수일수록 하늘색, 높을수록 남보라 */
+:root {
+  --band-RF-bg: #eaf6ff;
+  --band-RF-fg: #0b6aa8;
+  --band-MW-bg: #e6f1ff;
+  --band-MW-fg: #1b64da;
+  --band-X-bg: #e4ecff;
+  --band-X-fg: #2f55d4;
+  --band-K-bg: #e8e8ff;
+  --band-K-fg: #4744c9;
+  --band-MMW-bg: #eee8ff;
+  --band-MMW-fg: #5b3fc4;
+  --band-SUBTHZ-bg: #f3e8ff;
+  --band-SUBTHZ-fg: #7a35b8;
+  --band-THZ-bg: #fbe8f7;
+  --band-THZ-fg: #a12e88;
+  --band-OPT-bg: #e5f8f3;
+  --band-OPT-fg: #0d8063;
+  --cem-bg: #f0f4fa;
+  --cem-fg: #334a6b;
+  --date-head: #1b64da;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --band-RF-bg: rgba(64, 170, 240, 0.16);
+    --band-RF-fg: #7cc8ff;
+    --band-MW-bg: rgba(69, 147, 252, 0.17);
+    --band-MW-fg: #8ab9ff;
+    --band-X-bg: rgba(90, 125, 255, 0.18);
+    --band-X-fg: #9cb1ff;
+    --band-K-bg: rgba(112, 108, 255, 0.18);
+    --band-K-fg: #aeacff;
+    --band-MMW-bg: rgba(138, 104, 255, 0.18);
+    --band-MMW-fg: #bba6ff;
+    --band-SUBTHZ-bg: rgba(170, 92, 240, 0.18);
+    --band-SUBTHZ-fg: #d3a6ff;
+    --band-THZ-bg: rgba(220, 80, 190, 0.17);
+    --band-THZ-fg: #f3a6e0;
+    --band-OPT-bg: rgba(30, 190, 150, 0.16);
+    --band-OPT-fg: #6fe0bf;
+    --cem-bg: rgba(160, 180, 210, 0.12);
+    --cem-fg: #c4d2e6;
+    --date-head: #7db4ff;
+  }
+}
+:root[data-theme='dark'] {
+  --band-RF-bg: rgba(64, 170, 240, 0.16);
+  --band-RF-fg: #7cc8ff;
+  --band-MW-bg: rgba(69, 147, 252, 0.17);
+  --band-MW-fg: #8ab9ff;
+  --band-X-bg: rgba(90, 125, 255, 0.18);
+  --band-X-fg: #9cb1ff;
+  --band-K-bg: rgba(112, 108, 255, 0.18);
+  --band-K-fg: #aeacff;
+  --band-MMW-bg: rgba(138, 104, 255, 0.18);
+  --band-MMW-fg: #bba6ff;
+  --band-SUBTHZ-bg: rgba(170, 92, 240, 0.18);
+  --band-SUBTHZ-fg: #d3a6ff;
+  --band-THZ-bg: rgba(220, 80, 190, 0.17);
+  --band-THZ-fg: #f3a6e0;
+  --band-OPT-bg: rgba(30, 190, 150, 0.16);
+  --band-OPT-fg: #6fe0bf;
+  --cem-bg: rgba(160, 180, 210, 0.12);
+  --cem-fg: #c4d2e6;
+  --date-head: #7db4ff;
+}
+
+/* ── 필터 박스 ── */
+.radar-toolbar {
+  gap: 14px;
+  padding: 16px 18px;
+}
+.chip-groups {
+  gap: 10px;
+}
+.chip-group.facet {
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+.chip-group.facet + .chip-group.facet {
+  border-top: 0;
+  padding-top: 0;
+}
+.chip-label {
+  width: 92px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.facet .chip-label {
+  color: var(--blue-weak-text);
+}
+.facet .chip-label svg {
+  flex: none;
+}
+.kw-chip {
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s,
+    box-shadow 0.15s;
+}
+.kw-chip:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-2);
+}
+.kw-chip:focus-visible,
+.facet-reset:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+/* 일반 칩 활성: 파란 톤 (기존 검정 → 사이트 포인트 컬러) */
+.kw-chip.is-active,
+.kw-chip.is-active:hover {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: #fff;
+}
+.kw-chip.is-active span {
+  color: #fff;
+  opacity: 0.85;
+}
+.kw-chip.hl.is-active {
+  border-color: #f5a400;
+  background: #f5a400;
+}
+/* 주파수 칩: 대역별 파스텔 */
+.facet-band .facet-chip {
+  border-color: transparent;
+  background: var(--chip-bg);
+  color: var(--chip-fg);
+}
+.facet-band .facet-chip span {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--chip-fg);
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+}
+.facet-band .facet-chip:hover {
+  border-color: var(--chip-fg);
+  background: var(--chip-bg);
+}
+.facet-band .facet-chip.is-active,
+.facet-band .facet-chip.is-active:hover {
+  border-color: var(--chip-fg);
+  background: var(--chip-bg);
+  color: var(--chip-fg);
+  box-shadow: inset 0 0 0 1px var(--chip-fg);
+}
+.facet-band .facet-chip.is-active span {
+  background: var(--chip-fg);
+  color: var(--surface);
+  opacity: 1;
+}
+/* CEM 칩: 한 줄 키워드 (넓은 화면에서 가로 스크롤) */
+.facet-cem .kw-chips {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+.facet-cem .kw-chip {
+  flex: none;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  letter-spacing: -0.01em;
+}
+.facet-cem .kw-chip span,
+.facet-cem .facet-all {
+  font-family: inherit;
+}
+.facet-cem .facet-all {
+  font-family: Pretendard, system-ui, sans-serif;
+}
+.facet-chip svg {
+  margin-left: -2px;
+}
+.facet-all {
+  color: var(--g600);
+}
+.facet .facet-all.is-active,
+.facet .facet-all.is-active:hover {
+  border-color: var(--blue-weak);
+  background: var(--blue-weak);
+  color: var(--blue-weak-text);
+}
+.facet-reset {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--g500);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.facet-reset:hover {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+}
+
+/* 대역 토큰 → 칩·배지 공용 변수 */
+.band-RF { --chip-bg: var(--band-RF-bg); --chip-fg: var(--band-RF-fg); }
+.band-MW { --chip-bg: var(--band-MW-bg); --chip-fg: var(--band-MW-fg); }
+.band-X { --chip-bg: var(--band-X-bg); --chip-fg: var(--band-X-fg); }
+.band-K { --chip-bg: var(--band-K-bg); --chip-fg: var(--band-K-fg); }
+.band-MMW { --chip-bg: var(--band-MMW-bg); --chip-fg: var(--band-MMW-fg); }
+.band-SUBTHZ { --chip-bg: var(--band-SUBTHZ-bg); --chip-fg: var(--band-SUBTHZ-fg); }
+.band-THZ { --chip-bg: var(--band-THZ-bg); --chip-fg: var(--band-THZ-fg); }
+.band-OPT { --chip-bg: var(--band-OPT-bg); --chip-fg: var(--band-OPT-fg); }
+
+/* ── 카드 안 주파수 · 기법 배지 ── */
+.paper-spec,
+.w-paper-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.spec-band,
+.spec-cem {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.spec-band {
+  background: var(--chip-bg);
+  color: var(--chip-fg);
+}
+.spec-cem {
+  background: var(--cem-bg);
+  color: var(--cem-fg);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-weight: 700;
+}
+.paper-meta:empty {
+  display: none;
+}
+
+/* ── 날짜별 그룹 섹션 ── */
+.date-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+.date-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 16px;
+}
+.date-head h2 {
+  margin: 0;
+  font-size: 1.5rem; /* 24px */
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--date-head);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.date-count {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--blue-weak);
+  color: var(--blue-weak-text);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.date-rule {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--date-head) 35%, transparent), transparent);
+}
+.date-group .paper-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 1020px) {
+  .date-group .paper-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .date-group .paper-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .date-head h2 {
+    font-size: 1.375rem; /* 22px */
+  }
+  .date-groups {
+    gap: 32px;
+  }
+}
+
+/* 홈 위젯: 작은 날짜 헤더 */
+.w-paper-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.w-date-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--date-head);
+  font-variant-numeric: tabular-nums;
+}
+.w-date-head span {
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--blue-weak);
+  color: var(--blue-weak-text);
+  font-size: 0.72rem;
+  line-height: 20px;
+}
+
+/* ── 연구 일지: 검색 · 카테고리 ── */
+.journal-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.journal-search {
+  flex: none;
+  margin-bottom: 10px;
+}
+.cat-tabs button.is-zero:not(.is-active) {
+  color: var(--g500);
+}
+.journal-filter .radar-count {
+  margin: 8px 0 0;
+}
+/* 이전 글 · 다음 글 카드 */
+.post-nav-item {
+  gap: 4px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
+}
+.post-nav-item:hover {
+  border-color: var(--blue);
+  background: var(--surface);
+  transform: translateY(-1px);
+}
+.post-nav-item span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.post-nav-item.next span {
+  justify-content: flex-end;
+}
+.post-nav-item strong {
+  color: var(--g900);
+}
+.post-nav-item small {
+  font-size: 0.78rem;
+  color: var(--g500);
+}
+
+/* ── 연구 실적: BibTeX ── */
+.pub-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+.pub-actions .pub-links {
+  margin: 0;
+}
+.bib-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--blue-weak);
+  border-radius: 8px;
+  background: var(--blue-weak);
+  color: var(--blue-weak-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.bib-btn:hover {
+  border-color: var(--blue);
+}
+.bib-btn.is-done {
+  border-color: var(--green-weak);
+  background: var(--green-weak);
+  color: var(--green);
+}
+
+/* ── 다크모드 대비 보정: 일지 본문 · 수식 ── */
+:root[data-theme='dark'] .prose .katex,
+:root[data-theme='dark'] .prose .katex-display {
+  color: var(--g900);
+}
+:root[data-theme='dark'] .prose mark {
+  color: #191f28;
+}
+/* 라이트 모드에서 지정한 검정/진회색 글자색이 다크 배경에서 사라지지 않도록 */
+:root[data-theme='dark'] .prose [style*='color: rgb(0, 0, 0)'],
+:root[data-theme='dark'] .prose [style*='color: #000'],
+:root[data-theme='dark'] .prose [style*='color: rgb(25, 31, 40)'],
+:root[data-theme='dark'] .prose [style*='color: #191f28'],
+:root[data-theme='dark'] .prose [style*='color: rgb(51, 61, 75)'] {
+  color: var(--g800) !important;
+}
+:root[data-theme='dark'] .prose table th {
+  color: var(--g900);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .prose .katex,
+  :root:not([data-theme='light']) .prose .katex-display {
+    color: var(--g900);
+  }
+  :root:not([data-theme='light']) .prose mark {
+    color: #191f28;
+  }
+  :root:not([data-theme='light']) .prose [style*='color: rgb(0, 0, 0)'],
+  :root:not([data-theme='light']) .prose [style*='color: #000'],
+  :root:not([data-theme='light']) .prose [style*='color: rgb(25, 31, 40)'],
+  :root:not([data-theme='light']) .prose [style*='color: #191f28'],
+  :root:not([data-theme='light']) .prose [style*='color: rgb(51, 61, 75)'] {
+    color: var(--g800) !important;
+  }
+  :root:not([data-theme='light']) .prose table th {
+    color: var(--g900);
+  }
+}
+
+@media (max-width: 560px) {
+  .chip-label {
+    width: auto;
+  }
+  .chip-group.facet .kw-chips {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+}

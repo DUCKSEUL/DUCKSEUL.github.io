@@ -1,13 +1,25 @@
 import { useMemo, useState } from 'react'
-import { Icon, useDocumentTitle } from '../components/ui.jsx'
+import { Icon, toast, useDocumentTitle } from '../components/ui.jsx'
 import RadarSettings from '../components/RadarSettings.jsx'
 import { useAdmin } from '../lib/admin.js'
 import { useSiteData } from '../lib/siteData.js'
-import { useRadarPapers, useSortedPapers } from '../lib/sheets.js'
+import { useRadarPapers, useSortedPapers, groupByDate, fmtGroupDate, publishSnapshot, BANDS, METHODS } from '../lib/sheets.js'
 
 const statusTone = (s) => (/읽음$|완료|done|^read$/i.test(s) ? 'done' : /읽는|진행|reading/i.test(s) ? 'doing' : s ? 'todo' : '')
 const fmt = (d) => (d ? d.replace(/-/g, '.') : '')
-const MODE_LABEL = { sample: '샘플 데이터', gviz: 'Google Sheets (링크 공유)', apikey: 'Google Sheets API · API Key', oauth: 'Google Sheets API · OAuth (비공개)' }
+const MODE_LABEL = {
+  sample: '샘플 데이터',
+  gviz: 'Google Sheets 실시간 (링크 공유)',
+  apikey: 'Google Sheets API · API Key',
+  oauth: 'Google Sheets API · OAuth (비공개)',
+  snapshot: '공개 스냅샷 (public/data/papers.json)',
+}
+const BAND_LABEL = Object.fromEntries(BANDS.map((b) => [b.key, b.label]))
+const toggleIn = (set, v) => {
+  const n = new Set(set)
+  n.has(v) ? n.delete(v) : n.add(v)
+  return n
+}
 
 function readPref(key, fallback) {
   try {
@@ -62,6 +74,40 @@ function ChipGroup({ label, items, value, onChange }) {
   )
 }
 
+/** 다중 선택 필터 행 (동작 주파수 · CEM 기법) */
+function FacetRow({ label, icon, kind, items, selected, onToggle, onClear }) {
+  if (!items.length) return null
+  return (
+    <div className={`chip-group facet facet-${kind}`} role="group" aria-label={`${label} 필터 (여러 개 선택 가능)`}>
+      <span className="chip-label">
+        <Icon name={icon} size={13} /> {label}
+      </span>
+      <div className="kw-chips">
+        <button className={`kw-chip facet-all ${selected.size ? '' : 'is-active'}`} aria-pressed={!selected.size} onClick={onClear}>
+          전체
+        </button>
+        {items.map((it) => (
+          <button
+            key={it.key}
+            className={`kw-chip facet-chip ${it.tone || ''} ${selected.has(it.key) ? 'is-active' : ''}`}
+            aria-pressed={selected.has(it.key)}
+            title={it.hint}
+            onClick={() => onToggle(it.key)}
+          >
+            {selected.has(it.key) && <Icon name="check" size={12} />}
+            {it.label} <span>{it.n}</span>
+          </button>
+        ))}
+        {selected.size > 0 && (
+          <button className="facet-reset" onClick={onClear} aria-label={`${label} 선택 초기화`}>
+            <Icon name="close" size={12} /> 선택 초기화
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function OpenLink({ href, children = '원문 보기', className = 'btn btn-sm btn-weak' }) {
   if (!href) return null
   return (
@@ -76,9 +122,6 @@ function PaperCard({ p, rank }) {
   return (
     <li className={`paper ${p.important ? 'is-important' : ''}`} data-date={p.date} data-rank={rank}>
       <p className="paper-meta">
-        <span className="date-badge" title="기록일">
-          <Icon name="calendar" size={12} /> {fmt(p.date) || '날짜 없음'}
-        </span>
         {p.important && <em className="hl-badge">★ 중요</em>}
         {p.importance && !p.important && (
           <em className="grade-badge" title="중요도/등급">
@@ -93,6 +136,20 @@ function PaperCard({ p, rank }) {
         <p className="paper-venue">
           {p.venue && <span className="venue-badge">{p.venue}</span>}
           {p.year && <span className="year-badge">{p.year}</span>}
+        </p>
+      )}
+      {(p.bands.length > 0 || p.methods.length > 0) && (
+        <p className="paper-spec">
+          {p.bands.map((b) => (
+            <span key={b} className={`spec-band band-${b}`} title={p.freq || undefined}>
+              {BAND_LABEL[b]}
+            </span>
+          ))}
+          {p.methods.map((m) => (
+            <span key={m} className="spec-cem" title={p.cem || undefined}>
+              {m}
+            </span>
+          ))}
         </p>
       )}
       {p.summary && <p className="paper-sum">{p.summary}</p>}
@@ -181,6 +238,9 @@ export default function Radar() {
   const [venue, setVenue] = useState('')
   const [year, setYear] = useState('')
   const [onlyImportant, setOnlyImportant] = useState(false)
+  const [bandSel, setBandSel] = useState(() => new Set())
+  const [cemSel, setCemSel] = useState(() => new Set())
+  const [syncing, setSyncing] = useState(false)
   const [q, setQ] = useState('')
   const [settings, setSettings] = useState(false)
 
@@ -188,6 +248,16 @@ export default function Radar() {
   const tags = useMemo(() => tally(sorted, (p) => p.tags).sort((a, b) => b[1] - a[1]), [sorted])
   const venues = useMemo(() => tally(sorted, (p) => p.venueKey).sort((a, b) => b[1] - a[1]).slice(0, 12), [sorted])
   const years = useMemo(() => tally(sorted, (p) => p.year).sort((a, b) => String(b[0]).localeCompare(String(a[0]))), [sorted])
+  const bandItems = useMemo(() => {
+    const m = new Map(tally(sorted, (p) => p.bands))
+    return BANDS.filter((b) => m.has(b.key)).map((b) => ({ key: b.key, label: b.label, hint: b.hint, n: m.get(b.key), tone: `band-${b.key}` }))
+  }, [sorted])
+  const cemItems = useMemo(() => {
+    const m = new Map(tally(sorted, (p) => p.methods))
+    return METHODS.filter((x) => m.has(x.key))
+      .map((x) => ({ key: x.key, label: x.key, n: m.get(x.key) }))
+      .sort((a, b) => b.n - a.n)
+  }, [sorted])
   const needle = q.trim().toLowerCase()
   const shown = sorted.filter(
     (p) =>
@@ -195,10 +265,33 @@ export default function Radar() {
       (!venue || p.venueKey === venue) &&
       (!year || p.year === year) &&
       (!onlyImportant || p.important) &&
-      (!needle || [p.title, p.authors, p.venue, p.summary, p.comment, p.year, p.tags.join(' ')].join(' ').toLowerCase().includes(needle)),
+      (!bandSel.size || p.bands.some((b) => bandSel.has(b))) &&
+      (!cemSel.size || p.methods.some((m) => cemSel.has(m))) &&
+      (!needle || [p.title, p.authors, p.venue, p.summary, p.comment, p.year, p.freq, p.cem, p.structure, p.tags.join(' ')].join(' ').toLowerCase().includes(needle)),
   )
   const importantCount = sorted.filter((p) => p.important).length
-  const filtered = tag || venue || year || onlyImportant || needle
+  const filtered = tag || venue || year || onlyImportant || needle || bandSel.size > 0 || cemSel.size > 0
+  const groups = groupByDate(shown)
+  const resetAll = () => {
+    setTag('')
+    setVenue('')
+    setYear('')
+    setOnlyImportant(false)
+    setBandSel(new Set())
+    setCemSel(new Set())
+    setQ('')
+  }
+  const syncSnapshot = async () => {
+    setSyncing(true)
+    try {
+      await publishSnapshot(sheet.data)
+      toast('공개 스냅샷을 저장했어요. 1~2분 뒤 방문자 화면에 반영돼요.')
+    } catch (e) {
+      toast(`스냅샷 저장 실패: ${e.message}`, 'error')
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   const choose = (setter, key) => (v) => (setter(v), writePref(key, v))
 
@@ -212,9 +305,14 @@ export default function Radar() {
             <p className="page-sub">Google Sheets에 기록한 관심 논문을 실시간으로 불러와, 가장 최근에 기록한 논문부터 보여 줘요.</p>
           </div>
           <div className="page-actions">
-            {!sheet.sample && !sheet.needsAuth && (
+            {!sheet.sample && (
               <button className="btn btn-md btn-ghost" onClick={sheet.reload} disabled={sheet.loading}>
                 <Icon name="refresh" size={16} /> {sheet.loading ? '불러오는 중…' : '새로고침'}
+              </button>
+            )}
+            {isAdmin && !sheet.sample && sheet.data && sheet.source !== 'snapshot' && (
+              <button className="btn btn-md btn-ghost" onClick={syncSnapshot} disabled={syncing} title="방문자에게 보이는 public/data/papers.json 갱신">
+                <Icon name="upload" size={16} /> {syncing ? '저장 중…' : '공개 스냅샷 저장'}
               </button>
             )}
             {isAdmin && (
@@ -235,14 +333,15 @@ export default function Radar() {
           </div>
         )}
 
-        {sheet.needsAuth && (
+        {sheet.needsAuth && isAdmin && (
           <div className="card sample-banner">
             <p>
-              <Icon name="lock" size={18} /> 이 논문 레이더는 <b>비공개 Google Sheets</b>와 연결되어 있어 관리자만 볼 수 있어요.
+              <Icon name="lock" size={18} /> 비공개 시트를 읽을 수 없고 공개 스냅샷도 아직 없어요. 「Google Sheets API 설정」에서 Sheets 읽기 권한을 연결한 뒤
+              저장하면 방문자에게도 목록이 보여요.
             </p>
-            {isAdmin && <p className="muted">「Google Sheets API 설정」에서 Sheets 읽기 권한을 연결하면 이 브라우저에서만 표시돼요.</p>}
           </div>
         )}
+        {sheet.needsAuth && !isAdmin && <p className="empty">논문 목록을 준비하고 있어요. 잠시 후 다시 확인해 주세요.</p>}
 
         {sheet.error && (
           <div className="card sample-banner error">
@@ -296,22 +395,31 @@ export default function Radar() {
                 <ChipGroup label="키워드" items={tags} value={tag} onChange={setTag} />
                 <ChipGroup label="저널" items={venues} value={venue} onChange={setVenue} />
                 <ChipGroup label="연도" items={years} value={year} onChange={setYear} />
+                <FacetRow
+                  label="동작 주파수"
+                  icon="wave"
+                  kind="band"
+                  items={bandItems}
+                  selected={bandSel}
+                  onToggle={(k) => setBandSel((s) => toggleIn(s, k))}
+                  onClear={() => setBandSel(new Set())}
+                />
+                <FacetRow
+                  label="CEM 기법"
+                  icon="sigma"
+                  kind="cem"
+                  items={cemItems}
+                  selected={cemSel}
+                  onToggle={(k) => setCemSel((s) => toggleIn(s, k))}
+                  onClear={() => setCemSel(new Set())}
+                />
               </div>
             </div>
 
             <p className="radar-count">
-              {filtered ? `${shown.length} / ${sorted.length}편` : `${sorted.length}편`} · {order === 'newest' ? '최신 기록이 위' : '오래된 기록이 위'}
+              {filtered ? `${shown.length} / ${sorted.length}편` : `${sorted.length}편`} · 기록일 {groups.length}개 · {order === 'newest' ? '최신 기록이 위' : '오래된 기록이 위'}
               {filtered && (
-                <button
-                  className="link-btn"
-                  onClick={() => {
-                    setTag('')
-                    setVenue('')
-                    setYear('')
-                    setOnlyImportant(false)
-                    setQ('')
-                  }}
-                >
+                <button className="link-btn" onClick={resetAll}>
                   필터 초기화
                 </button>
               )}
@@ -321,19 +429,41 @@ export default function Radar() {
               view === 'table' ? (
                 <PaperTable papers={shown} />
               ) : (
-                <ul className="paper-grid">
-                  {shown.map((p, i) => (
-                    <PaperCard key={p.id} p={p} rank={i} />
+                <div className="date-groups">
+                  {groups.map((g) => (
+                    <section key={g.date || 'none'} className="date-group" aria-label={`${fmtGroupDate(g.date)} 기록 논문`}>
+                      <header className="date-head">
+                        <h2>
+                          <time dateTime={g.date || undefined}>{fmtGroupDate(g.date)}</time>
+                        </h2>
+                        <span className="date-count">{g.papers.length}편</span>
+                        <span className="date-rule" aria-hidden />
+                      </header>
+                      <ul className="paper-grid">
+                        {g.papers.map((p, i) => (
+                          <PaperCard key={p.id} p={p} rank={i} />
+                        ))}
+                      </ul>
+                    </section>
                   ))}
-                </ul>
+                </div>
               )
             ) : (
-              <p className="empty">조건에 맞는 논문이 없어요.</p>
+              <div className="empty">
+                <p>조건에 맞는 논문이 없어요.</p>
+                <button className="btn btn-sm btn-weak" onClick={resetAll}>
+                  필터 초기화
+                </button>
+              </div>
             )}
 
             <p className="sheet-foot muted sm">
-              {MODE_LABEL[sheet.mode]}
-              {sheet.data.fetchedAt && ` · ${sheet.data.fetchedAt.toTimeString().slice(0, 5)} 불러옴`}
+              {MODE_LABEL[sheet.source || sheet.mode]}
+              {sheet.data.fetchedAt &&
+                (sheet.source === 'snapshot'
+                  ? ` · ${sheet.data.fetchedAt.toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })} 동기화`
+                  : ` · ${sheet.data.fetchedAt.toTimeString().slice(0, 5)} 불러옴`)}
+              {isAdmin && sheet.synced && ' · 공개 스냅샷 자동 갱신됨'}
             </p>
           </>
         )}

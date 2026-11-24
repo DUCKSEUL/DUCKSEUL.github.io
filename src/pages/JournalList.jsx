@@ -1,15 +1,17 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Icon, toast, useDocumentTitle } from '../components/ui.jsx'
 import PostListItem from '../components/PostListItem.jsx'
 import Modal from '../components/Modal.jsx'
 import BackToTop from '../components/BackToTop.jsx'
-import { usePosts, importPosts, getPendingChanges, markSynced } from '../lib/store.js'
+import { usePosts, importPosts, getPendingChanges, markSynced, postText } from '../lib/store.js'
 import { removePost, deleteMessage } from '../lib/removePost.js'
 import { useAdmin } from '../lib/admin.js'
 import { profile } from '../data/profile.js'
+import { JOURNAL_CATS as DEFAULT_CATS } from '../lib/labels.js'
 
 const ALL = '전체'
+
 const io = () => import('../lib/exportImport.js')
 
 export default function JournalList() {
@@ -25,8 +27,13 @@ export default function JournalList() {
   const pending = isAdmin ? getPendingChanges() : { upserts: [], deletes: [] }
   const pendingCount = pending.upserts.length + pending.deletes.length
 
-  const categories = [...new Set(posts.map((p) => p.category || '연구 노트'))]
-  const list = cat === ALL ? posts : posts.filter((p) => (p.category || '연구 노트') === cat)
+  const [q, setQ] = useState('')
+  const catOf = (p) => p.category || '연구 노트'
+  const categories = [...new Set([...DEFAULT_CATS, ...posts.map(catOf)])]
+  const needle = q.trim().toLowerCase()
+  const texts = useMemo(() => new Map(posts.map((p) => [p.id, [p.title, catOf(p), (p.tags || []).join(' '), postText(p.html || '')].join(' ').toLowerCase()])), [posts])
+  const matched = needle ? posts.filter((p) => needle.split(/\s+/).every((w) => texts.get(p.id)?.includes(w))) : posts
+  const list = cat === ALL ? matched : matched.filter((p) => catOf(p) === cat)
   const syncingCount = posts.filter((p) => p.source === 'syncing').length
 
   const publishAll = async () => {
@@ -89,19 +96,41 @@ export default function JournalList() {
           </div>
         )}
 
-        <nav className="cat-tabs" aria-label="카테고리">
-          {[ALL, ...categories].map((c) => (
-            <button
-              key={c}
-              className={c === cat ? 'is-active' : ''}
-              aria-pressed={c === cat}
-              onClick={() => setParams(c === ALL ? {} : { category: c })}
-            >
-              {c}
-              <span>{c === ALL ? posts.length : posts.filter((p) => (p.category || '연구 노트') === c).length}</span>
-            </button>
-          ))}
-        </nav>
+        <div className="journal-filter">
+          <div className="radar-search journal-search">
+            <Icon name="search" size={16} />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="제목·본문·태그 검색" aria-label="연구 일지 검색" />
+            {q && (
+              <button onClick={() => setQ('')} aria-label="검색어 지우기">
+                <Icon name="close" size={14} />
+              </button>
+            )}
+          </div>
+          <nav className="cat-tabs" aria-label="카테고리">
+            {[ALL, ...categories].map((c) => {
+              const n = c === ALL ? matched.length : matched.filter((p) => catOf(p) === c).length
+              return (
+                <button
+                  key={c}
+                  className={`${c === cat ? 'is-active' : ''} ${n ? '' : 'is-zero'}`}
+                  aria-pressed={c === cat}
+                  onClick={() => setParams(c === ALL ? {} : { category: c })}
+                >
+                  {c}
+                  <span>{n}</span>
+                </button>
+              )
+            })}
+          </nav>
+          {needle && (
+            <p className="radar-count">
+              「{q.trim()}」 검색 결과 {list.length}개
+              <button className="link-btn" onClick={() => setQ('')}>
+                검색 지우기
+              </button>
+            </p>
+          )}
+        </div>
 
         {list.length ? (
           <div className="post-items">
@@ -111,7 +140,7 @@ export default function JournalList() {
           </div>
         ) : (
           <div className="empty">
-            <p>아직 글이 없어요.</p>
+            <p>{needle ? '검색 결과가 없어요.' : cat !== ALL ? `「${cat}」 카테고리에 아직 글이 없어요.` : '아직 글이 없어요.'}</p>
             {isAdmin && (
               <Link className="btn btn-md btn-weak" to="/write">
                 첫 일지 쓰기

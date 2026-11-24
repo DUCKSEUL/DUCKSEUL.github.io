@@ -26,6 +26,9 @@ export const ROLE_DEFS = [
   { role: 'importance', label: '중요도', names: ['중요도', '중요', '우선순위', '순위/등급', '등급', '순위', 'importance', 'priority', 'rank', 'grade', 'star', 'stars', 'rating'] },
   { role: 'status', label: '읽음상태', names: ['읽음상태', '읽음 상태', '상태', '읽음', 'status', 'read', 'state'] },
   { role: 'comment', label: '내 코멘트', names: ['소감', '코멘트', '내 평가', '한줄 소감', '평가', 'comment', 'my note', 'review'] },
+  { role: 'freq', label: '동작 주파수', names: ['동작 주파수', '주파수', '대역', '주파수 대역', 'frequency', 'freq', 'band', 'operating frequency'] },
+  { role: 'cem', label: 'CEM 기법', names: ['cem 기법', 'cem', '해석 기법', '수치 기법', '기법', '방법론', 'method', 'methods', 'solver', 'technique'] },
+  { role: 'structure', label: '핵심 구조/소자', names: ['핵심 구조/소자', '핵심 구조', '구조/소자', '구조', '소자', 'structure', 'device'] },
 ]
 const norm = (s) =>
   String(s || '')
@@ -125,11 +128,106 @@ export function toPapers(headers, rows, overrides) {
         important: isImportant(get(row, 'importance')),
         status: get(row, 'status'),
         comment: get(row, 'comment'),
+        freq: get(row, 'freq'),
+        cem: get(row, 'cem'),
+        structure: get(row, 'structure'),
         raw: row,
       }
     })
     .filter((p) => p.title)
+    .map((p) => ({ ...p, bands: detectBands(p), methods: detectMethods(p) }))
 }
+
+/* ── 동작 주파수 대역 · CEM 기법 자동 분류 ─────────────────────── */
+// 칩 표시 순서 = 스펙트럼 순서
+export const BANDS = [
+  { key: 'RF', label: 'RF · UHF', hint: '< 1 GHz' },
+  { key: 'MW', label: 'Microwave', hint: '1–8 GHz' },
+  { key: 'X', label: 'X-band', hint: '8–12 GHz' },
+  { key: 'K', label: 'Ku · K · Ka', hint: '12–30 GHz' },
+  { key: 'MMW', label: 'mmWave', hint: '30–100 GHz' },
+  { key: 'SUBTHZ', label: 'Sub-THz', hint: '100–300 GHz' },
+  { key: 'THZ', label: 'THz', hint: '0.3–30 THz' },
+  { key: 'OPT', label: 'Optical', hint: 'IR · Visible' },
+]
+const bandOfGHz = (f) =>
+  f < 1 ? 'RF' : f < 8 ? 'MW' : f < 12 ? 'X' : f < 30 ? 'K' : f < 100 ? 'MMW' : f < 300 ? 'SUBTHZ' : f < 30000 ? 'THZ' : 'OPT'
+const UNIT_GHZ = { khz: 1e-6, mhz: 1e-3, ghz: 1, thz: 1000 }
+const BAND_WORDS = [
+  ['OPT', /optical|optics|visible|infrared|photonic|\blidar\b|광학|가시광|적외선|포토닉/i],
+  ['THZ', /(?<!sub[- ]?)\bterahertz\b|(?<!sub[- ]?)\bthz\b|테라헤르츠/i],
+  ['SUBTHZ', /sub[- ]?thz|sub[- ]?terahertz|d[- ]band|서브\s*테라/i],
+  ['MMW', /mm[- ]?wave|millimet(er|re)[- ]wave|밀리미터파|\b(28|38|60|77|79|94)\s*ghz/i],
+  ['K', /\bk[ua]?[- ]band\b/i],
+  ['X', /\bx[- ]band\b/i],
+  ['MW', /microwave|마이크로파|\bs[- ]band\b|\bc[- ]band\b|\bl[- ]band\b|sub[- ]?6/i],
+  ['RF', /\buhf\b|\bvhf\b|\brfid\b/i],
+]
+/** 주파수 문자열에서 대역 키 목록. 괄호 속 부연 설명(예: 오기 메모)은 무시 */
+export function bandsFromText(text) {
+  const s = String(text || '').replace(/\([^)]*\)|（[^）]*）/g, ' ')
+  const out = new Set()
+  const re = /(\d+(?:\.\d+)?)(?:\s*(?:[-–~]|to)\s*(\d+(?:\.\d+)?))?\s*(khz|mhz|ghz|thz|nm|μm|µm|um)\b/gi
+  const hits = [...s.matchAll(re)]
+  // GHz 이상 값이 있으면 MHz·kHz 값(변조·신호 대역폭 등)은 동작 대역에서 제외
+  const hasHigh = hits.some((m) => /ghz|thz/i.test(m[3]))
+  for (const m of hits) {
+    const unit = m[3].toLowerCase()
+    if (hasHigh && (unit === 'mhz' || unit === 'khz')) continue
+    for (const v of [m[1], m[2]].filter(Boolean).map(Number).filter((x) => x > 0)) {
+      if (unit in UNIT_GHZ) out.add(bandOfGHz(v * UNIT_GHZ[unit]))
+      else out.add(unit === 'nm' || v < 30 ? 'OPT' : 'THZ') // 파장: nm·수 μm는 광학, 수십 μm 이상은 THz
+    }
+  }
+  for (const [k, re2] of BAND_WORDS) if (re2.test(s)) out.add(k)
+  return BANDS.map((b) => b.key).filter((k) => out.has(k))
+}
+function detectBands(p) {
+  const own = bandsFromText(p.freq)
+  if (own.length) return own
+  return bandsFromText([p.title, p.summary, p.tags.join(' '), p.structure].join(' | '))
+}
+
+export const METHODS = [
+  { key: 'MoM / IE', re: /\bmom\b|method of moments|모멘트\s*법|integral equation|적분\s*방정식|\b[emc]fie\b|\brwg\b|\bmlfma\b|\bfmm\b|\bpmchwt\b/i },
+  { key: 'FDTD', re: /fdtd|finite[- ]difference time[- ]domain|유한\s*차분\s*시간/i },
+  { key: 'FEM', re: /\bfem\b|finite[- ]element|유한\s*요소|\bhfss\b|comsol/i },
+  { key: 'MNT / Floquet', re: /\bmnt\b|network theory|네트워크\s*이론|multiport network|다중\s*포트\s*네트워크|floquet|플로케/i },
+  { key: 'GSTC', re: /gstc|generali[sz]ed sheet transition|시트\s*전이\s*조건|surface susceptibilit|표면\s*감수율/i },
+  { key: 'Equivalent Circuit', re: /equivalent[- ]circuit|등가\s*회로|transmission[- ]line model|전송\s*선로\s*모델/i },
+  { key: 'CMA', re: /\bcma\b|characteristic mode|특성\s*모드/i },
+  { key: 'DDA / Dipole', re: /\bdda\b|discrete dipole|coupled[- ]dipole|쌍극자\s*근사|이산\s*쌍극자|분극률/i },
+  { key: 'RCWA', re: /\brcwa\b|rigorous coupled[- ]wave/i },
+  { key: 'Coupled-Mode', re: /coupled[- ]mode theory|\bcmt\b|결합\s*모드\s*이론/i },
+  { key: 'Inverse Design', re: /inverse design|역설계|adjoint|애드조인트|topology optimi[sz]ation|위상\s*최적화/i },
+  { key: 'ML / DL', re: /deep learning|neural network|machine learning|딥\s*러닝|신경망|머신\s*러닝|\bcnn\b|\bgan\b/i },
+]
+/** CEM 기법 열(없으면 제목·요약·키워드)에서 주요 기법 추출 */
+export function methodsFromText(text) {
+  const s = String(text || '')
+  return METHODS.filter((m) => m.re.test(s)).map((m) => m.key)
+}
+function detectMethods(p) {
+  const own = methodsFromText(p.cem)
+  if (own.length) return own
+  return methodsFromText([p.title, p.summary, p.tags.join(' ')].join(' | '))
+}
+
+/** 같은 기록일끼리 묶기 (입력 순서 유지) → [{ date, papers }] */
+export function groupByDate(papers) {
+  const groups = []
+  const at = new Map()
+  for (const p of papers) {
+    const k = p.date || ''
+    if (!at.has(k)) {
+      at.set(k, groups.length)
+      groups.push({ date: k, papers: [] })
+    }
+    groups[at.get(k)].papers.push(p)
+  }
+  return groups
+}
+export const fmtGroupDate = (d) => (d ? d.replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$1. $2. $3') : '날짜 미기록')
 
 /** order: 'newest'(기본) | 'oldest' */
 export function sortPapers(papers, order = 'newest') {
@@ -246,34 +344,135 @@ export async function fetchSheet(cfg) {
   return { headers, rows, papers: toPapers(headers, rows, cfg.columns), roles: detectRoles(headers, cfg.columns), fetchedAt: new Date() }
 }
 
-/** radar.json 설정 → 실시간 데이터 (연결 전에는 샘플) */
+/* ── 공개 스냅샷 (public/data/papers.json) ─────────────────────────
+ * 비공개(OAuth) 시트여도 방문자 화면이 막히지 않도록, 관리자가 시트를 읽을 때
+ * headers/rows 스냅샷을 저장소에 커밋해 두고 방문자는 이 파일을 먼저 보여 줍니다. */
+export const SNAPSHOT_PATH = 'public/data/papers.json'
+const SNAPSHOT_URL = '/data/papers.json'
+let snapPromise = null
+export function loadSnapshot(force = false) {
+  if (!snapPromise || force)
+    snapPromise = fetch(SNAPSHOT_URL, { cache: 'no-cache' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s) => (s && Array.isArray(s.headers) && Array.isArray(s.rows) ? s : null))
+      .catch(() => null)
+  return snapPromise
+}
+
+/** 표 내용 지문 (변경 여부 비교용, djb2) */
+export function fingerprint(headers, rows) {
+  const text = JSON.stringify([headers, rows])
+  let h = 5381
+  for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0
+  return (h >>> 0).toString(36) + text.length.toString(36)
+}
+
+export function makeSnapshot(data) {
+  return { syncedAt: new Date().toISOString(), fingerprint: fingerprint(data.headers, data.rows), headers: data.headers, rows: data.rows }
+}
+
+function fromSnapshot(snap, columns) {
+  if (!snap) return null
+  return {
+    headers: snap.headers,
+    rows: snap.rows,
+    papers: toPapers(snap.headers, snap.rows, columns),
+    roles: detectRoles(snap.headers, columns),
+    fetchedAt: snap.syncedAt ? new Date(snap.syncedAt) : null,
+    source: 'snapshot',
+  }
+}
+
+// 관리자 브라우저: 실시간 데이터가 스냅샷과 다르면 papers.json을 자동 갱신 (세션당 지문별 1회)
+const syncing = new Set()
+async function autoSyncSnapshot(data) {
+  const snap = makeSnapshot(data)
+  const current = await loadSnapshot()
+  if (current?.fingerprint === snap.fingerprint || syncing.has(snap.fingerprint)) return false
+  syncing.add(snap.fingerprint)
+  try {
+    const { publishJSON } = await import('./publish.js')
+    await publishJSON(SNAPSHOT_PATH, snap, `radar: 공개 스냅샷 동기화 (${data.papers.length}편)`)
+    snapPromise = Promise.resolve(snap)
+    return true
+  } catch (e) {
+    syncing.delete(snap.fingerprint)
+    console.warn('[radar] 스냅샷 동기화 실패:', e)
+    return false
+  }
+}
+
+/**
+ * radar.json 설정 → 논문 데이터
+ *  1) 공개 스냅샷(papers.json)을 먼저 보여 주고  2) 실시간 시트를 읽어 교체합니다.
+ *  - OAuth 모드 + 방문자: 시트가 링크 공유돼 있으면 gviz로 실시간, 아니면 스냅샷
+ *  - 실시간 읽기 실패 시에도 스냅샷이 있으면 오류 대신 스냅샷을 유지
+ */
 export function useRadarPapers(cfg, ready = true) {
   const { isAdmin } = useAdmin()
   const g = useGoogle()
   const mode = ready && cfg?.sheetUrl ? cfg.mode || 'gviz' : 'sample'
   const canOAuth = isAdmin && g.connected && g.token?.sheets
-  const needsAuth = mode === 'oauth' && !canOAuth
-  const [state, setState] = useState({ loading: false, error: '', data: null })
+  const [state, setState] = useState({ loading: false, error: '', data: null, source: '', synced: false })
   const [nonce, setNonce] = useState(0)
-  const key = JSON.stringify([mode, cfg?.sheetUrl, cfg?.sheetName, cfg?.apiKey, cfg?.columns, canOAuth])
+  const key = JSON.stringify([mode, cfg?.sheetUrl, cfg?.sheetName, cfg?.apiKey, cfg?.columns, canOAuth, isAdmin])
 
   useEffect(() => {
-    if (mode === 'sample' || needsAuth) {
-      setState({ loading: false, error: '', data: null })
+    if (mode === 'sample') {
+      setState({ loading: false, error: '', data: null, source: '', synced: false })
       return
     }
     let alive = true
+    let live = false
     setState((s) => ({ ...s, loading: true, error: '' }))
-    fetchSheet({ ...cfg, mode })
-      .then((data) => alive && setState({ loading: false, error: '', data }))
-      .catch((e) => alive && setState({ loading: false, error: e.message, data: null }))
+
+    // 1) 스냅샷: 즉시 표시
+    const snapP = loadSnapshot(nonce > 0).then((snap) => {
+      const d = fromSnapshot(snap, cfg.columns)
+      if (alive && d && !live) setState((s) => (s.data && s.source !== 'snapshot' ? s : { ...s, data: d, source: 'snapshot' }))
+      return d
+    })
+
+    // 2) 실시간 시트
+    const liveMode = mode === 'oauth' && !canOAuth ? 'gviz' : mode
+    fetchSheet({ ...cfg, mode: liveMode })
+      .then(async (data) => {
+        live = true
+        if (!alive) return
+        setState({ loading: false, error: '', data: { ...data, source: liveMode }, source: liveMode, synced: false })
+        if (isAdmin && (await autoSyncSnapshot(data)) && alive) setState((s) => ({ ...s, synced: true }))
+      })
+      .catch(async (e) => {
+        const snap = await snapP
+        if (!alive) return
+        if (snap) setState((s) => ({ ...s, loading: false, error: '', data: s.data || snap, source: s.source || 'snapshot' }))
+        else
+          setState({
+            loading: false,
+            error: mode === 'oauth' && !canOAuth ? '' : e.message,
+            data: null,
+            source: '',
+            synced: false,
+          })
+      })
     return () => {
       alive = false
     }
   }, [key, nonce]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const data = mode === 'sample' ? SAMPLE : state.data
-  return { ...state, mode, data, sample: mode === 'sample', needsAuth, isAdmin, reload: () => setNonce((n) => n + 1) }
+  // 실시간·스냅샷 모두 없을 때만 「비공개」 안내 (관리자용)
+  const needsAuth = mode === 'oauth' && !canOAuth && !state.loading && !data
+  return { ...state, mode, data, sample: mode === 'sample', needsAuth, isAdmin, canOAuth, reload: () => setNonce((n) => n + 1) }
+}
+
+/** 관리자: 현재 데이터를 공개 스냅샷으로 즉시 커밋 */
+export async function publishSnapshot(data) {
+  const snap = makeSnapshot(data)
+  const { publishJSON } = await import('./publish.js')
+  await publishJSON(SNAPSHOT_PATH, snap, `radar: 공개 스냅샷 동기화 (${data.papers.length}편)`)
+  snapPromise = Promise.resolve(snap)
+  return snap
 }
 
 /** 정렬된 목록 (최신 기록순 기본) */
