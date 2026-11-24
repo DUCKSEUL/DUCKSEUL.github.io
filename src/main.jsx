@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App.jsx'
 import 'katex/dist/katex.min.css'
 import './index.css'
+import './styles-v2.css'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

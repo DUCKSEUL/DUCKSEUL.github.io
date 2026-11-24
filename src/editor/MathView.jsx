@@ -10,7 +10,8 @@ export default function MathView({ node, extension, getPos, selected }) {
   const edit = (e) => {
     e.preventDefault()
     e.stopPropagation()
-    extension.options.onEdit?.({ latex, display, pos: getPos() })
+    const target = e.currentTarget.querySelector('.katex') || e.currentTarget
+    extension.options.onEdit?.({ latex, display, pos: getPos(), rect: target.getBoundingClientRect() })
   }
 
   return (

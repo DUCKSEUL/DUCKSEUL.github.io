@@ -4,12 +4,16 @@ import { EditorContent, useEditor } from '@tiptap/react'
 import { NodeSelection } from '@tiptap/pm/state'
 import { buildExtensions } from '../editor/extensions.js'
 import Toolbar from '../editor/Toolbar.jsx'
-import MathModal from '../editor/MathModal.jsx'
+import MathPopover from '../editor/MathPopover.jsx'
+import TableToolbar from '../editor/TableToolbar.jsx'
 import Modal from '../components/Modal.jsx'
 import { Icon, toast, useDocumentTitle } from '../components/ui.jsx'
-import { usePosts, savePost, newId, postText } from '../lib/store.js'
+import { usePosts, savePost, newId } from '../lib/store.js'
+import { saveDraft, loadDraft, clearDraft, relativeTime } from '../lib/drafts.js'
 import { fileToDataUrl, imageFiles } from '../lib/image.js'
 import NotFound from './NotFound.jsx'
+
+const AUTOSAVE_MS = 2000
 
 export default function Write() {
   const { id } = useParams()
@@ -20,9 +24,34 @@ export default function Write() {
   return <EditorPage key={id || 'new'} initial={existing} categories={[...new Set(posts.map((p) => p.category).filter(Boolean))]} />
 }
 
+function SaveBadge({ savedAt, saving }) {
+  const [, tick] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 1000)
+    return () => clearInterval(t)
+  }, [])
+  return (
+    <span className={`save-badge ${savedAt ? 'is-saved' : ''}`} aria-live="polite">
+      <span className={`dot ${saving ? 'is-saving' : ''}`} />
+      {savedAt ? `${relativeTime(savedAt)} 임시저장됨` : '작성 중'}
+    </span>
+  )
+}
+
+function countChars(editor) {
+  if (!editor) return { all: 0, noSpace: 0, minutes: 0 }
+  const text = editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n', (node) =>
+    node.type.name.startsWith('math') ? node.attrs.latex : '',
+  )
+  const all = text.replace(/\n/g, '').length
+  const noSpace = text.replace(/\s/g, '').length
+  return { all, noSpace, minutes: noSpace ? Math.max(1, Math.ceil(noSpace / 500)) : 0 }
+}
+
 function EditorPage({ initial, categories }) {
   useDocumentTitle(initial ? `수정: ${initial.title} · 연구 일지` : '새 일지 쓰기 · 연구 일지')
   const navigate = useNavigate()
+  const draftKey = initial ? `journal-draft:${initial.id}` : 'journal-draft:new'
   const [postId] = useState(() => initial?.id || newId())
   const createdAt = useRef(initial?.createdAt || new Date().toISOString())
   const [title, setTitle] = useState(initial?.title || '')
@@ -30,14 +59,18 @@ function EditorPage({ initial, categories }) {
   const [tags, setTags] = useState((initial?.tags || []).join(', '))
   const [savedAt, setSavedAt] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [recovery, setRecovery] = useState(null)
   const [mathState, setMathState] = useState(null)
   const [linkState, setLinkState] = useState(null)
   const fileRef = useRef(null)
   const editorRef = useRef(null)
-  const draft = useRef(initial ? !!initial.draft : true)
-  const timer = useRef(null)
+  const dirty = useRef(false)
+  const recoveryRef = useRef(null)
+  recoveryRef.current = recovery
 
-  const onEditMath = useCallback((s) => setMathState(s), [])
+  const onEditMath = useCallback(({ latex, display, pos, rect }) => {
+    setMathState({ latex, display, pos, anchor: { left: rect.left, top: rect.top, bottom: rect.bottom } })
+  }, [])
   const extensions = useMemo(() => buildExtensions({ onEditMath: (s) => onEditMath(s) }), [onEditMath])
 
   const insertImages = useCallback(async (files, pos) => {
@@ -47,7 +80,7 @@ function EditorPage({ initial, categories }) {
       try {
         const src = await fileToDataUrl(f)
         const at = pos ?? ed.state.selection.from
-        ed.chain().focus().insertContentAt(at, { type: 'image', attrs: { src, alt: f.name.replace(/\.[^.]+$/, '') } }).run()
+        ed.chain().focus().insertContentAt(at, { type: 'image', attrs: { src, alt: '' } }).run()
       } catch (e) {
         console.warn(e)
         toast('사진을 불러오지 못했어요.', 'error')
@@ -80,87 +113,127 @@ function EditorPage({ initial, categories }) {
         return true
       },
     },
-    onUpdate: () => scheduleSave(),
+    onUpdate: () => {
+      dirty.current = true
+    },
   })
   editorRef.current = editor
 
-  // ── 자동 저장 ─────────────────────────
-  const doSave = useCallback(
-    async (opts = {}) => {
+  // ── 임시저장 복구 안내 ─────────────────
+  useEffect(() => {
+    let alive = true
+    loadDraft(draftKey).then((d) => {
+      if (!alive || !d) return
+      const same = d.html === (initial?.html || '') && d.title === (initial?.title || '')
+      if (!same && (d.title || d.html?.replace(/<[^>]+>/g, '').trim() || /<img|data-latex/.test(d.html || ''))) setRecovery(d)
+    })
+    return () => {
+      alive = false
+    }
+  }, [draftKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const restore = () => {
+    const d = recovery
+    editorRef.current?.commands.setContent(d.html || '')
+    setTitle(d.title || '')
+    setCategory(d.category || '연구 노트')
+    setTags(d.tags || '')
+    setRecovery(null)
+    setSavedAt(d.savedAt)
+    toast('임시저장된 글을 복구했어요.')
+  }
+  const discard = async () => {
+    await clearDraft(draftKey)
+    setRecovery(null)
+  }
+
+  // ── 2초 간격 자동 임시저장 ─────────────
+  const latest = useRef({})
+  latest.current = { title, category, tags }
+  useEffect(() => {
+    dirty.current = true
+  }, [title, category, tags])
+  useEffect(() => {
+    dirty.current = false // 처음 불러온 상태는 저장하지 않음
+    const t = setInterval(async () => {
       const ed = editorRef.current
-      if (!ed) return
-      const html = ed.getHTML()
-      const empty = !title.trim() && !postText(html) && !/<img|data-latex/.test(html)
-      if (empty && !opts.force) return
+      if (!ed || !dirty.current || recoveryRef.current) return
+      dirty.current = false
       setSaving(true)
       try {
-        await savePost({
-          id: postId,
-          title: title.trim() || '제목 없음',
-          category: category.trim() || '연구 노트',
-          tags: tags
-            .split(',')
-            .map((t) => t.trim())
-            .filter(Boolean),
-          createdAt: createdAt.current,
-          updatedAt: new Date().toISOString(),
-          draft: opts.draft ?? draft.current,
-          html,
-        })
-        if (opts.draft !== undefined) draft.current = opts.draft
-        setSavedAt(new Date())
+        const ts = Date.now()
+        await saveDraft(draftKey, { ...latest.current, html: ed.getHTML(), savedAt: ts })
+        setSavedAt(ts)
       } catch {
-        toast('저장 공간이 부족해 저장하지 못했어요. 내보내기로 백업해 주세요.', 'error')
+        toast('임시저장에 실패했어요. 백업을 권장해요.', 'error')
       } finally {
         setSaving(false)
       }
-    },
-    [postId, title, category, tags],
-  )
-  const saveRef = useRef(doSave)
-  saveRef.current = doSave
+    }, AUTOSAVE_MS)
+    return () => clearInterval(t)
+  }, [draftKey])
 
-  function scheduleSave() {
-    clearTimeout(timer.current)
-    timer.current = setTimeout(() => saveRef.current(), 700)
-  }
+  // ── 단축키 ─────────────────────────────
   useEffect(() => {
-    if (editor) scheduleSave()
-  }, [title, category, tags]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => () => clearTimeout(timer.current), [])
-
-  // ── 단축키: Alt+1 (½), Alt+2 (⅓), Alt+3 (수식) ──
-  useEffect(() => {
+    const inEditor = (e) => !!e.target?.closest?.('.ProseMirror')
     const onKey = (e) => {
-      if (!e.altKey || e.ctrlKey || e.metaKey) return
       const ed = editorRef.current
       if (!ed) return
+      const mod = e.ctrlKey || e.metaKey
+      // Ctrl+E / L / R : 정렬 (브라우저 기본 동작 차단)
+      if (mod && !e.altKey && !e.shiftKey && inEditor(e)) {
+        const k = e.key.toLowerCase()
+        if (k === 'e' || k === 'l' || k === 'r') {
+          e.preventDefault()
+          e.stopPropagation()
+          if (k === 'e') ed.chain().focus().setTextAlign(ed.isActive({ textAlign: 'center' }) ? 'left' : 'center').run()
+          if (k === 'l') ed.chain().focus().setTextAlign('left').run()
+          if (k === 'r') ed.chain().focus().setTextAlign('right').run()
+          return
+        }
+        if (k === 'k') {
+          e.preventDefault()
+          e.stopPropagation()
+          openLink()
+          return
+        }
+      }
+      if (!e.altKey || mod) return
       if (e.code === 'Digit3') {
         e.preventDefault()
-        setMathState({ latex: '', display: false, pos: null })
+        e.stopPropagation()
+        openMath()
       } else if (e.code === 'Digit1' || e.code === 'Digit2') {
         const sel = ed.state.selection
         if (sel instanceof NodeSelection && sel.node.type.name === 'image') {
           e.preventDefault()
+          e.stopPropagation()
           ed.chain().updateAttributes('image', { width: e.code === 'Digit1' ? '50%' : '33.3%' }).run()
         }
       }
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Ctrl+K: 링크
-  useEffect(() => {
-    const onKey = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && editorRef.current?.isFocused) {
-        e.preventDefault()
-        openLink()
-      }
+  function openMath() {
+    const ed = editorRef.current
+    const sel = ed.state.selection
+    if (sel instanceof NodeSelection && sel.node.type.name.startsWith('math')) {
+      const dom = ed.view.nodeDOM(sel.from)
+      const rect = (dom?.querySelector?.('.katex') || dom).getBoundingClientRect()
+      setMathState({ latex: sel.node.attrs.latex, display: sel.node.type.name === 'mathBlock', pos: sel.from, anchor: { left: rect.left, top: rect.top, bottom: rect.bottom } })
+      return
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }) // eslint-disable-line react-hooks/exhaustive-deps
+    let c
+    try {
+      c = ed.view.coordsAtPos(sel.from)
+    } catch {
+      const r = ed.view.dom.getBoundingClientRect()
+      c = { left: r.left, top: r.top, bottom: r.top + 24 }
+    }
+    setMathState({ latex: '', display: false, pos: null, anchor: { left: c.left, top: c.top, bottom: c.bottom } })
+  }
 
   const submitMath = ({ latex, display, pos }) => {
     const ed = editorRef.current
@@ -186,6 +259,10 @@ function EditorPage({ initial, categories }) {
     }
     setMathState(null)
   }
+  const closeMath = useCallback(() => {
+    setMathState(null)
+    editorRef.current?.commands.focus()
+  }, [])
 
   function openLink() {
     const ed = editorRef.current
@@ -219,42 +296,70 @@ function EditorPage({ initial, categories }) {
   }
 
   const publish = async () => {
-    clearTimeout(timer.current)
     if (!title.trim()) {
       toast('제목을 입력해 주세요.', 'error')
       document.getElementById('post-title')?.focus()
       return
     }
-    await doSave({ draft: false, force: true })
-    toast('발행했어요! 이 브라우저에 저장되었어요.')
-    navigate(`/journal/${postId}`)
+    try {
+      await savePost({
+        id: postId,
+        title: title.trim(),
+        category: category.trim() || '연구 노트',
+        tags: tags
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean),
+        createdAt: createdAt.current,
+        updatedAt: new Date().toISOString(),
+        draft: false,
+        html: editor.getHTML(),
+      })
+      await clearDraft(draftKey)
+      dirty.current = false
+      toast(initial ? '수정했어요.' : '발행했어요! 이 브라우저에 저장되었어요.')
+      navigate(`/journal/${postId}`)
+    } catch {
+      toast('저장 공간이 부족해 저장하지 못했어요. 백업 후 다시 시도해 주세요.', 'error')
+    }
   }
 
-  const status = saving ? '저장 중…' : savedAt ? `자동 저장됨 ${savedAt.toTimeString().slice(0, 5)}` : initial ? '수정 중' : '작성 중'
+  const counts = countChars(editor)
 
   return (
     <div className="write">
       <div className="write-bar">
         <div className="container write-bar-inner">
           <Link to={initial ? `/journal/${initial.id}` : '/journal'} className="back-link">
-            <Icon name="chevronLeft" size={18} /> {initial ? '글로 돌아가기' : '연구 일지'}
+            <Icon name="chevronLeft" size={18} /> <span className="hide-sm">{initial ? '글로 돌아가기' : '연구 일지'}</span>
           </Link>
-          <span className="save-status" aria-live="polite">
-            <span className={`dot ${saving ? 'is-saving' : ''}`} /> {status}
-          </span>
+          <SaveBadge savedAt={savedAt} saving={saving} />
           <button className="btn btn-md btn-primary" onClick={publish}>
-            {initial && !initial.draft ? '수정 완료' : '발행하기'}
+            {initial ? '수정 완료' : '발행하기'}
           </button>
         </div>
         <div className="toolbar-wrap">
-          <Toolbar
-            editor={editor}
-            onMath={() => setMathState({ latex: '', display: false, pos: null })}
-            onLink={openLink}
-            onImage={() => fileRef.current?.click()}
-          />
+          <Toolbar editor={editor} onMath={openMath} onLink={openLink} onImage={() => fileRef.current?.click()} />
         </div>
       </div>
+
+      {recovery && (
+        <div className="recovery" role="alert">
+          <Icon name="note" size={20} />
+          <p>
+            <strong>임시저장된 글이 있어요.</strong>
+            <span>
+              {new Date(recovery.savedAt).toLocaleString('ko-KR')}에 저장된 「{recovery.title || '제목 없음'}」을 이어서 쓸까요?
+            </span>
+          </p>
+          <button className="btn btn-sm btn-ghost" onClick={discard}>
+            삭제
+          </button>
+          <button className="btn btn-sm btn-primary" onClick={restore}>
+            복구하기
+          </button>
+        </div>
+      )}
 
       <div className="write-doc">
         <div className="write-meta">
@@ -271,13 +376,7 @@ function EditorPage({ initial, categories }) {
               <option key={c} value={c} />
             ))}
           </datalist>
-          <input
-            className="meta-input grow"
-            value={tags}
-            onChange={(e) => setTags(e.target.value)}
-            aria-label="태그"
-            placeholder="태그 (쉼표로 구분)"
-          />
+          <input className="meta-input grow" value={tags} onChange={(e) => setTags(e.target.value)} aria-label="태그" placeholder="태그 (쉼표로 구분)" />
         </div>
         <textarea
           id="post-title"
@@ -296,9 +395,21 @@ function EditorPage({ initial, categories }) {
         />
         <hr className="title-rule" />
         <EditorContent editor={editor} />
-        <p className="write-help">
-          <kbd>Alt</kbd>+<kbd>1</kbd> 사진 ½ · <kbd>Alt</kbd>+<kbd>2</kbd> 사진 ⅓ · <kbd>Alt</kbd>+<kbd>3</kbd> 수식 입력 · 수식 더블클릭으로 수정
-        </p>
+      </div>
+
+      <div className="write-foot" aria-live="off">
+        <div className="container write-foot-inner">
+          <span>
+            글자 수 <strong data-testid="count-all">{counts.all.toLocaleString()}</strong>
+            <em>(공백 제외 <strong data-testid="count-nospace">{counts.noSpace.toLocaleString()}</strong>)</em>
+          </span>
+          <span>
+            예상 읽기 시간 <strong data-testid="read-time">{counts.minutes}분</strong>
+          </span>
+          <span className="foot-keys hide-sm">
+            <kbd>Ctrl</kbd>+<kbd>E</kbd>/<kbd>L</kbd>/<kbd>R</kbd> 정렬 · <kbd>Alt</kbd>+<kbd>1</kbd>/<kbd>2</kbd> 사진 크기 · <kbd>Alt</kbd>+<kbd>3</kbd> 수식
+          </span>
+        </div>
       </div>
 
       <input
@@ -314,7 +425,8 @@ function EditorPage({ initial, categories }) {
         }}
       />
 
-      <MathModal state={mathState} onClose={() => setMathState(null)} onSubmit={submitMath} />
+      <TableToolbar editor={editor} />
+      <MathPopover state={mathState} onClose={closeMath} onSubmit={submitMath} />
 
       <Modal
         open={!!linkState}
@@ -347,12 +459,7 @@ function EditorPage({ initial, categories }) {
           <form id="link-form" className="form-stack" onSubmit={submitLink}>
             <label>
               <span>URL</span>
-              <input
-                autoFocus
-                value={linkState.href}
-                onChange={(e) => setLinkState({ ...linkState, href: e.target.value })}
-                placeholder="https://"
-              />
+              <input autoFocus value={linkState.href} onChange={(e) => setLinkState({ ...linkState, href: e.target.value })} placeholder="https://" />
             </label>
             {!linkState.hasSelection && !editor?.isActive('link') && (
               <label>

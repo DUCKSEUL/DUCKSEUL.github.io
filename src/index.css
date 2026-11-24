@@ -1360,11 +1360,6 @@ kbd {
   color: inherit;
   font-size: 0.86em;
 }
-.prose hr {
-  border: 0;
-  border-top: 1px solid var(--line-strong);
-  margin: 2em 0;
-}
 .prose img {
   display: block;
   max-width: 100%;

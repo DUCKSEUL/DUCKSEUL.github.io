@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Icon, toast, useDocumentTitle } from '../components/ui.jsx'
 import PostListItem from '../components/PostListItem.jsx'
 import Modal from '../components/Modal.jsx'
+import BackToTop from '../components/BackToTop.jsx'
 import { usePosts, importPosts } from '../lib/store.js'
 import { profile } from '../data/profile.js'
 
@@ -83,6 +84,7 @@ export default function JournalList() {
         )}
       </div>
 
+      <BackToTop />
       <Modal open={backupOpen} title="일지 백업 · 불러오기" onClose={() => setBackupOpen(false)} width={520}>
         <div className="backup">
           <p className="backup-note">

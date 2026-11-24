@@ -1,12 +1,34 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { flushSync } from 'react-dom'
 import DOMPurify from 'dompurify'
 import { Icon, toast, useDocumentTitle } from '../components/ui.jsx'
 import Lightbox from '../components/Lightbox.jsx'
 import Modal from '../components/Modal.jsx'
+import BackToTop from '../components/BackToTop.jsx'
 import { usePosts, deletePost, formatDateTime } from '../lib/store.js'
 import { renderMathIn } from '../lib/math.js'
 import NotFound from './NotFound.jsx'
+
+function TocList({ toc, active, onGo }) {
+  return (
+    <ol className="toc-list">
+      {toc.map((t) => (
+        <li key={t.id} className={`lv${t.level} ${active === t.id ? 'is-active' : ''}`}>
+          <a
+            href={`#${t.id}`}
+            onClick={(e) => {
+              e.preventDefault()
+              onGo(t.id)
+            }}
+          >
+            {t.text}
+          </a>
+        </li>
+      ))}
+    </ol>
+  )
+}
 
 export default function JournalPost() {
   const { id } = useParams()
@@ -17,6 +39,9 @@ export default function JournalPost() {
   const [lightbox, setLightbox] = useState(null)
   const [copying, setCopying] = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
+  const [toc, setToc] = useState([])
+  const [active, setActive] = useState(null)
+  const [tocOpen, setTocOpen] = useState(false)
   useDocumentTitle(post ? `${post.title} · 연구 일지` : '연구 일지')
 
   const html = useMemo(
@@ -24,9 +49,31 @@ export default function JournalPost() {
     [post],
   )
 
+  // 수식 렌더링 + 소제목(H2, H3)으로 목차 생성
   useEffect(() => {
-    renderMathIn(bodyRef.current)
+    const body = bodyRef.current
+    if (!body) return
+    renderMathIn(body)
+    const hs = [...body.querySelectorAll('h2, h3')].filter((h) => h.textContent.trim())
+    hs.forEach((h, i) => (h.id = `sec-${i + 1}`))
+    setToc(hs.map((h) => ({ id: h.id, text: h.textContent.trim(), level: h.tagName === 'H2' ? 2 : 3 })))
   }, [html])
+
+  // 현재 읽는 섹션 강조
+  useEffect(() => {
+    if (!toc.length) return
+    const onScroll = () => {
+      let cur = toc[0].id
+      for (const t of toc) {
+        const el = document.getElementById(t.id)
+        if (el && el.getBoundingClientRect().top < 140) cur = t.id
+      }
+      setActive(cur)
+    }
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [toc])
 
   if (!post) return ready ? <NotFound /> : <div className="page" />
 
@@ -34,9 +81,17 @@ export default function JournalPost() {
   const newer = posts[idx - 1]
   const older = posts[idx + 1]
 
+  const go = (secId) => {
+    // 접이식 목차를 먼저 닫아 레이아웃을 확정한 뒤 스크롤 (닫히면서 위치가 밀리지 않도록)
+    flushSync(() => setTocOpen(false))
+    document.getElementById(secId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   const onBodyClick = (e) => {
     const img = e.target.closest('img')
-    if (img && bodyRef.current.contains(img)) setLightbox({ src: img.currentSrc || img.src, alt: img.alt })
+    if (!img || !bodyRef.current.contains(img)) return
+    const cap = img.closest('figure')?.querySelector('figcaption')?.textContent
+    setLightbox({ src: img.currentSrc || img.src, alt: cap || img.alt })
   }
 
   const copyNaver = async () => {
@@ -56,7 +111,7 @@ export default function JournalPost() {
 
   return (
     <article className="page journal">
-      <div className="journal-col">
+      <div className="journal-col post-col">
         <Link to="/journal" className="back-link">
           <Icon name="chevronLeft" size={18} /> 연구 일지 목록
         </Link>
@@ -71,7 +126,6 @@ export default function JournalPost() {
               <strong>{post.source === 'published' ? 'DUCKSEUL' : '나'}</strong>
               <span>{formatDateTime(post.createdAt)}</span>
               {post.updatedAt && post.updatedAt !== post.createdAt && <span>· 수정 {formatDateTime(post.updatedAt)}</span>}
-              {post.draft && <em className="badge warn">임시저장</em>}
             </p>
             <div className="post-actions">
               <button className="btn btn-sm btn-naver" onClick={copyNaver} disabled={copying}>
@@ -93,6 +147,28 @@ export default function JournalPost() {
             </ul>
           )}
         </header>
+
+        {toc.length > 0 && (
+          <>
+            {/* 넓은 화면: 본문 오른쪽 바깥 여백에 고정 목차 */}
+            <aside className="toc-side" aria-label="목차">
+              <nav>
+                <p className="toc-title">목차</p>
+                <TocList toc={toc} active={active} onGo={go} />
+              </nav>
+            </aside>
+            {/* 좁은 화면: 본문 상단 접이식 목차 */}
+            <div className={`toc-box ${tocOpen ? 'is-open' : ''}`}>
+              <button className="toc-toggle" onClick={() => setTocOpen((v) => !v)} aria-expanded={tocOpen}>
+                <span>
+                  <Icon name="menu" size={16} /> 목차 <em>{toc.length}</em>
+                </span>
+                <Icon name="chevronDown" size={18} />
+              </button>
+              {tocOpen && <TocList toc={toc} active={active} onGo={go} />}
+            </div>
+          </>
+        )}
 
         <div ref={bodyRef} className="prose post-body" onClick={onBodyClick} dangerouslySetInnerHTML={{ __html: html }} />
 
@@ -116,6 +192,7 @@ export default function JournalPost() {
         </nav>
       </div>
 
+      <BackToTop />
       <Lightbox src={lightbox?.src} alt={lightbox?.alt} onClose={() => setLightbox(null)} />
 
       <Modal

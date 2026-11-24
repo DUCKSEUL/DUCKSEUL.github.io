@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../components/ui.jsx'
-import { FONT_FAMILIES, FONT_SIZES } from './extensions.js'
+import { DEFAULT_SIZE, DIVIDERS, FONT_FAMILIES, FONT_SIZES } from './extensions.js'
 
 const COLORS = [
   '#000000', '#333d4b', '#6b7684', '#b0b8c1', '#ffffff',
@@ -12,24 +12,27 @@ const BG_COLORS = [
   '#d0ebff', '#e5dbff', '#f3d9fa', '#e9ecef', '#191f28',
 ]
 
-function Btn({ icon, label, active, onClick, disabled, shortcut }) {
+const keep = (e) => e.preventDefault()
+
+function Btn({ icon, label, active, onClick, disabled, shortcut, children, className = '' }) {
   return (
     <button
       type="button"
-      className={`tb-btn ${active ? 'is-active' : ''}`}
-      onMouseDown={(e) => e.preventDefault()}
+      className={`tb-btn ${active ? 'is-active' : ''} ${className}`}
+      onMouseDown={keep}
       onClick={onClick}
       disabled={disabled}
       title={shortcut ? `${label} (${shortcut})` : label}
       aria-label={label}
       aria-pressed={active || undefined}
     >
-      <Icon name={icon} size={18} />
+      {icon && <Icon name={icon} size={18} />}
+      {children}
     </button>
   )
 }
 
-function ColorPicker({ icon, label, colors, current, onPick, onReset, resetLabel }) {
+function usePopover() {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
   useEffect(() => {
@@ -38,12 +41,17 @@ function ColorPicker({ icon, label, colors, current, onPick, onReset, resetLabel
     document.addEventListener('mousedown', off)
     return () => document.removeEventListener('mousedown', off)
   }, [open])
+  return { open, setOpen, ref }
+}
+
+function ColorPicker({ icon, label, colors, current, onPick, onReset, resetLabel }) {
+  const { open, setOpen, ref } = usePopover()
   return (
     <div className="tb-pop" ref={ref}>
       <button
         type="button"
         className="tb-btn tb-color"
-        onMouseDown={(e) => e.preventDefault()}
+        onMouseDown={keep}
         onClick={() => setOpen((v) => !v)}
         title={label}
         aria-label={label}
@@ -60,7 +68,7 @@ function ColorPicker({ icon, label, colors, current, onPick, onReset, resetLabel
                 key={c}
                 type="button"
                 style={{ background: c }}
-                onMouseDown={(e) => e.preventDefault()}
+                onMouseDown={keep}
                 onClick={() => {
                   onPick(c)
                   setOpen(false)
@@ -73,7 +81,7 @@ function ColorPicker({ icon, label, colors, current, onPick, onReset, resetLabel
           <button
             type="button"
             className="tb-palette-reset"
-            onMouseDown={(e) => e.preventDefault()}
+            onMouseDown={keep}
             onClick={() => {
               onReset()
               setOpen(false)
@@ -87,6 +95,66 @@ function ColorPicker({ icon, label, colors, current, onPick, onReset, resetLabel
   )
 }
 
+function DividerMenu({ onPick }) {
+  const { open, setOpen, ref } = usePopover()
+  return (
+    <div className="tb-pop" ref={ref}>
+      <button
+        type="button"
+        className="tb-btn tb-divider"
+        onMouseDown={keep}
+        onClick={() => setOpen((v) => !v)}
+        title="구분선"
+        aria-label="구분선"
+        aria-expanded={open}
+      >
+        <Icon name="hr" size={18} />
+        <Icon name="chevronDown" size={12} />
+      </button>
+      {open && (
+        <div className="tb-menu dv-menu" role="menu" aria-label="구분선 스타일">
+          {DIVIDERS.map((d) => (
+            <button
+              key={d.value}
+              type="button"
+              role="menuitem"
+              className="dv-item"
+              data-variant={d.value}
+              onMouseDown={keep}
+              onClick={() => {
+                onPick(d.value)
+                setOpen(false)
+              }}
+            >
+              <span className="dv-prev">
+                <hr data-style={d.value} />
+              </span>
+              <span className="dv-label">{d.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function stepFontSize(editor, dir) {
+  const cur = editor.getAttributes('textStyle').fontSize || DEFAULT_SIZE
+  const n = parseFloat(cur)
+  let next
+  if (dir > 0) next = FONT_SIZES.find((s) => parseFloat(s) > n) || FONT_SIZES[FONT_SIZES.length - 1]
+  else next = [...FONT_SIZES].reverse().find((s) => parseFloat(s) < n) || FONT_SIZES[0]
+  editor.chain().focus().setFontSize(next).run()
+}
+
+export function insertDivider(editor, variant) {
+  editor
+    .chain()
+    .focus()
+    .insertContent([{ type: 'horizontalRule', attrs: { variant } }, { type: 'paragraph' }])
+    .run()
+}
+
 export default function Toolbar({ editor, onMath, onLink, onImage }) {
   if (!editor) return null
   const c = () => editor.chain().focus()
@@ -98,7 +166,7 @@ export default function Toolbar({ editor, onMath, onLink, onImage }) {
       : editor.isActive('heading', { level: 4 })
         ? 'h4'
         : 'p'
-  const inTable = editor.isActive('table')
+  const size = ts.fontSize || ''
 
   return (
     <div className="toolbar" role="toolbar" aria-label="서식 도구">
@@ -135,19 +203,29 @@ export default function Toolbar({ editor, onMath, onLink, onImage }) {
             </option>
           ))}
         </select>
-        <select
-          className="tb-select"
-          aria-label="글씨 크기"
-          value={FONT_SIZES.includes(ts.fontSize) ? ts.fontSize : ''}
-          onChange={(e) => (e.target.value ? c().setFontSize(e.target.value).run() : c().unsetFontSize().run())}
-        >
-          <option value="">크기</option>
-          {FONT_SIZES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        <div className="tb-size">
+          <select
+            className="tb-select size"
+            aria-label="글씨 크기"
+            value={FONT_SIZES.includes(size) ? size : ''}
+            onChange={(e) => (e.target.value ? c().setFontSize(e.target.value).run() : c().unsetFontSize().run())}
+          >
+            <option value="">{size && !FONT_SIZES.includes(size) ? size : DEFAULT_SIZE}</option>
+            {FONT_SIZES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          <Btn label="글씨 크기 줄이기" className="tb-step" onClick={() => stepFontSize(editor, -1)} disabled={parseFloat(size || DEFAULT_SIZE) <= 10}>
+            <span aria-hidden>가</span>
+            <small aria-hidden>−</small>
+          </Btn>
+          <Btn label="글씨 크기 키우기" className="tb-step" onClick={() => stepFontSize(editor, 1)} disabled={parseFloat(size || DEFAULT_SIZE) >= 36}>
+            <span aria-hidden className="big">가</span>
+            <small aria-hidden>+</small>
+          </Btn>
+        </div>
       </div>
 
       <div className="tb-group">
@@ -176,60 +254,28 @@ export default function Toolbar({ editor, onMath, onLink, onImage }) {
       </div>
 
       <div className="tb-group">
-        <Btn icon="alignLeft" label="왼쪽 정렬" active={editor.isActive({ textAlign: 'left' })} onClick={() => c().setTextAlign('left').run()} />
-        <Btn icon="alignCenter" label="가운데 정렬" active={editor.isActive({ textAlign: 'center' })} onClick={() => c().setTextAlign('center').run()} />
-        <Btn icon="alignRight" label="오른쪽 정렬" active={editor.isActive({ textAlign: 'right' })} onClick={() => c().setTextAlign('right').run()} />
+        <Btn icon="alignLeft" label="왼쪽 정렬" shortcut="Ctrl+L" active={editor.isActive({ textAlign: 'left' })} onClick={() => c().setTextAlign('left').run()} />
+        <Btn icon="alignCenter" label="가운데 정렬" shortcut="Ctrl+E" active={editor.isActive({ textAlign: 'center' })} onClick={() => c().setTextAlign('center').run()} />
+        <Btn icon="alignRight" label="오른쪽 정렬" shortcut="Ctrl+R" active={editor.isActive({ textAlign: 'right' })} onClick={() => c().setTextAlign('right').run()} />
       </div>
 
       <div className="tb-group">
         <Btn icon="listBullet" label="글머리 기호 목록" active={editor.isActive('bulletList')} onClick={() => c().toggleBulletList().run()} />
         <Btn icon="listOrdered" label="번호 목록" active={editor.isActive('orderedList')} onClick={() => c().toggleOrderedList().run()} />
         <Btn icon="quote" label="인용구" active={editor.isActive('blockquote')} onClick={() => c().toggleBlockquote().run()} />
-        <Btn icon="hr" label="구분선" onClick={() => c().setHorizontalRule().run()} />
+        <DividerMenu onPick={(v) => insertDivider(editor, v)} />
       </div>
 
       <div className="tb-group">
         <Btn icon="link" label="링크" shortcut="Ctrl+K" active={editor.isActive('link')} onClick={onLink} />
         <Btn icon="image" label="사진 넣기" onClick={onImage} />
-        <Btn
-          icon="table"
-          label="표 넣기"
-          active={inTable}
-          onClick={() => c().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
-        />
+        <Btn icon="table" label="표 넣기" active={editor.isActive('table')} onClick={() => c().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} />
         <Btn icon="codeBlock" label="코드 블록" active={editor.isActive('codeBlock')} onClick={() => c().toggleCodeBlock().run()} />
-        <button
-          type="button"
-          className="tb-btn tb-math"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={onMath}
-          title="수식 입력 (Alt+3)"
-          aria-label="수식 입력"
-        >
+        <Btn label="수식 입력" shortcut="Alt+3" className="tb-math" onClick={onMath}>
           <Icon name="sigma" size={18} />
           <span>수식</span>
-        </button>
+        </Btn>
       </div>
-
-      {inTable && (
-        <div className="tb-group tb-table">
-          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => c().addRowAfter().run()}>
-            + 행
-          </button>
-          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => c().addColumnAfter().run()}>
-            + 열
-          </button>
-          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => c().deleteRow().run()}>
-            − 행
-          </button>
-          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => c().deleteColumn().run()}>
-            − 열
-          </button>
-          <button type="button" className="danger" onMouseDown={(e) => e.preventDefault()} onClick={() => c().deleteTable().run()}>
-            표 삭제
-          </button>
-        </div>
-      )}
     </div>
   )
 }

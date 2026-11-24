@@ -38,6 +38,20 @@ function turndown() {
     filter: (n) => n.nodeName === 'SPAN' && n.getAttribute('data-type') === 'math-inline',
     replacement: (_, n) => `$${n.getAttribute('data-latex')}$`,
   })
+  td.addRule('figure', {
+    filter: 'figure',
+    replacement: (_, n) => {
+      const img = n.querySelector('img')
+      const cap = n.querySelector('figcaption')?.textContent?.trim() || ''
+      if (!img) return ''
+      return `
+
+![${cap || img.getAttribute('alt') || ''}](${img.getAttribute('src')})${cap ? `
+*${cap}*` : ''}
+
+`
+    },
+  })
   td.addRule('mathBlock', {
     filter: (n) => n.nodeName === 'DIV' && n.getAttribute('data-type') === 'math-block',
     replacement: (_, n) => `\n\n$$\n${n.getAttribute('data-latex')}\n$$\n\n`,

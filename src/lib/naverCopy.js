@@ -191,13 +191,60 @@ export async function buildNaverHtml(container) {
   })
   clone.querySelectorAll('th').forEach((el) => addStyle(el, 'border:1px solid #d1d6db;padding:8px 12px;background:#f2f4f6;font-weight:bold;text-align:left'))
   clone.querySelectorAll('td').forEach((el) => addStyle(el, 'border:1px solid #d1d6db;padding:8px 12px'))
-  clone.querySelectorAll('hr').forEach((el) => addStyle(el, 'border:0;border-top:1px solid #d1d6db;margin:28px 0'))
+  const HR = {
+    line: 'border:0;border-top:1px solid #d1d6db;margin:28px 0',
+    bold: 'border:0;border-top:3px solid #333d4b;margin:28px 0',
+    dotted: 'border:0;border-top:2px dotted #b0b8c1;margin:28px 0',
+    short: 'border:0;border-top:2px solid #333d4b;width:60px;margin:32px auto',
+    double: 'border:0;border-top:4px double #8b95a1;margin:28px 0',
+  }
+  clone.querySelectorAll('hr').forEach((el) => {
+    const v = el.getAttribute('data-style') || 'line'
+    if (v === 'dots') {
+      const p = document.createElement('p')
+      p.setAttribute('style', 'text-align:center;color:#b0b8c1;font-size:14pt;letter-spacing:14px;margin:28px 0')
+      p.textContent = '• • •'
+      el.replaceWith(p)
+    } else {
+      el.removeAttribute('data-style')
+      el.setAttribute('style', HR[v] || HR.line)
+    }
+  })
   clone.querySelectorAll('ul, ol').forEach((el) => addStyle(el, 'margin:0 0 14px;padding-left:24px;line-height:1.8'))
   clone.querySelectorAll('a').forEach((el) => addStyle(el, 'color:#3182f6;text-decoration:underline'))
 
+  // 사진(figure): 캡션은 옅은 회색 가운데 정렬, 테두리 옵션 반영
+  clone.querySelectorAll('figure').forEach((fig) => {
+    const img = fig.querySelector('img')
+    if (!img) return fig.remove()
+    const pct = parseFloat(fig.style.width)
+    const px = Math.round(740 * (Number.isFinite(pct) && fig.style.width.endsWith('%') ? pct / 100 : 1))
+    const src = img.getAttribute('src') || ''
+    if (src.startsWith('/')) img.setAttribute('src', location.origin + src)
+    img.setAttribute('width', String(px))
+    img.setAttribute('data-done', '1')
+    img.setAttribute(
+      'style',
+      `width:${px}px;max-width:100%;height:auto;${fig.getAttribute('data-border') === 'true' ? 'border:1px solid #e5e8eb' : 'border:0'}`,
+    )
+    const p = document.createElement('p')
+    p.setAttribute('style', 'text-align:center;margin:16px 0 4px')
+    p.appendChild(img)
+    const frag = document.createDocumentFragment()
+    frag.appendChild(p)
+    const cap = fig.querySelector('figcaption')?.textContent?.trim()
+    if (cap) {
+      const c = document.createElement('p')
+      c.setAttribute('style', 'text-align:center;color:#8b95a1;font-size:10pt;margin:4px 0 18px')
+      c.textContent = cap
+      frag.appendChild(c)
+    }
+    fig.replaceWith(frag)
+  })
+
   // 본문 사진: 절대 주소 + 가운데 정렬 + px 너비(네이버 본문 폭 약 740px 기준)
   clone.querySelectorAll('img').forEach((img) => {
-    if (img.hasAttribute('data-math')) return
+    if (img.hasAttribute('data-math') || img.hasAttribute('data-done')) return
     const src = img.getAttribute('src') || ''
     if (src.startsWith('/')) img.setAttribute('src', location.origin + src)
     const pct = parseFloat(img.style.width)
@@ -214,7 +261,9 @@ export async function buildNaverHtml(container) {
   })
 
   clone.querySelectorAll('[class]').forEach((el) => el.removeAttribute('class'))
-  clone.querySelectorAll('[data-type], [data-latex], [data-math], [title]').forEach((el) => {
+  clone.querySelectorAll('[data-type], [data-latex], [data-math], [data-done], [data-border], [title]').forEach((el) => {
+    el.removeAttribute('data-done')
+    el.removeAttribute('data-border')
     el.removeAttribute('data-math')
     el.removeAttribute('data-type')
     el.removeAttribute('data-latex')
