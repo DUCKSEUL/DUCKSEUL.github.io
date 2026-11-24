@@ -16,18 +16,12 @@ function download(name, text, type) {
 }
 
 const stamp = () => new Date().toISOString().slice(0, 10)
-const strip = ({ source, ...p }) => p // eslint-disable-line no-unused-vars
+const strip = ({ source, syncedAt, ...p }) => p // eslint-disable-line no-unused-vars
 
 /* ── JSON ───────────────────────────────── */
 export function exportJSON(posts) {
   const data = { version: 1, exportedAt: new Date().toISOString(), posts: posts.map(strip) }
   download(`research-journal-${stamp()}.json`, JSON.stringify(data, null, 2), 'application/json')
-}
-
-/** 저장소에 커밋해 공개할 때 쓰는 형식 (src/data/journal.json) */
-export function exportPublishJSON(posts) {
-  const list = posts.filter((p) => !p.draft).map(strip)
-  download('journal.json', JSON.stringify(list, null, 2), 'application/json')
 }
 
 /* ── Markdown ───────────────────────────── */

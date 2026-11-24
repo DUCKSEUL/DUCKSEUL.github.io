@@ -4,7 +4,8 @@ import { Icon, toast, useDocumentTitle } from '../components/ui.jsx'
 import PostListItem from '../components/PostListItem.jsx'
 import Modal from '../components/Modal.jsx'
 import BackToTop from '../components/BackToTop.jsx'
-import { usePosts, importPosts } from '../lib/store.js'
+import { usePosts, importPosts, getPendingChanges, markSynced } from '../lib/store.js'
+import { useAdmin } from '../lib/admin.js'
 import { profile } from '../data/profile.js'
 
 const ALL = '전체'
@@ -17,10 +18,29 @@ export default function JournalList() {
   const cat = params.get('category') || ALL
   const [backupOpen, setBackupOpen] = useState(false)
   const fileRef = useRef(null)
+  const { isAdmin } = useAdmin()
+  const [publishing, setPublishing] = useState(false)
+  const pending = isAdmin ? getPendingChanges() : { upserts: [], deletes: [] }
+  const pendingCount = pending.upserts.length + pending.deletes.length
 
   const categories = [...new Set(posts.map((p) => p.category || '연구 노트'))]
   const list = cat === ALL ? posts : posts.filter((p) => (p.category || '연구 노트') === cat)
-  const localCount = posts.filter((p) => p.source !== 'published').length
+  const syncingCount = posts.filter((p) => p.source === 'syncing').length
+
+  const publishAll = async () => {
+    setPublishing(true)
+    try {
+      const { publishChanges } = await import('../lib/publish.js')
+      const res = await publishChanges(pending)
+      await markSynced([...pending.upserts.map((p) => p.id), ...pending.deletes])
+      toast(`GitHub에 ${pendingCount}건을 발행했어요${res.uploaded ? ` (사진 ${res.uploaded}장)` : ''}. 1~2분 뒤 반영돼요.`)
+      setBackupOpen(false)
+    } catch (e) {
+      toast(`GitHub 발행 실패: ${e.message}`, 'error')
+    } finally {
+      setPublishing(false)
+    }
+  }
 
   const onImport = async (file) => {
     try {
@@ -41,18 +61,31 @@ export default function JournalList() {
             <p className="eyebrow">Research Journal</p>
             <h1 className="page-title">연구 일지</h1>
             <p className="page-sub">
-              전체 {posts.length}개의 글{localCount > 0 && ` · 이 브라우저에 저장된 글 ${localCount}개`}
+              전체 {posts.length}개의 글{isAdmin && syncingCount > 0 && ` · 배포 대기 ${syncingCount}개`}
             </p>
           </div>
-          <div className="journal-actions">
-            <button className="btn btn-md btn-ghost" onClick={() => setBackupOpen(true)}>
-              <Icon name="download" size={18} /> 백업
-            </button>
-            <Link className="btn btn-md btn-primary" to="/write">
-              <Icon name="pen" size={18} /> 글쓰기
-            </Link>
-          </div>
+          {isAdmin && (
+            <div className="journal-actions">
+              <button className="btn btn-md btn-ghost" onClick={() => setBackupOpen(true)}>
+                <Icon name="download" size={18} /> 백업 · 불러오기
+              </button>
+              <Link className="btn btn-md btn-primary" to="/write">
+                <Icon name="pen" size={18} /> 글쓰기
+              </Link>
+            </div>
+          )}
         </header>
+
+        {pendingCount > 0 && (
+          <div className="publish-bar" role="status">
+            <p>
+              GitHub에 아직 발행하지 않은 변경사항 <strong>{pendingCount}건</strong>이 이 브라우저에 있어요.
+            </p>
+            <button className="btn btn-sm btn-primary" onClick={publishAll} disabled={publishing}>
+              <Icon name="upload" size={16} /> {publishing ? '발행 중…' : '모두 발행'}
+            </button>
+          </div>
+        )}
 
         <nav className="cat-tabs" aria-label="카테고리">
           {[ALL, ...categories].map((c) => (
@@ -77,18 +110,20 @@ export default function JournalList() {
         ) : (
           <div className="empty">
             <p>아직 글이 없어요.</p>
-            <Link className="btn btn-md btn-weak" to="/write">
-              첫 일지 쓰기
-            </Link>
+            {isAdmin && (
+              <Link className="btn btn-md btn-weak" to="/write">
+                첫 일지 쓰기
+              </Link>
+            )}
           </div>
         )}
       </div>
 
       <BackToTop />
-      <Modal open={backupOpen} title="일지 백업 · 불러오기" onClose={() => setBackupOpen(false)} width={520}>
+      <Modal open={isAdmin && backupOpen} title="일지 백업 · 불러오기" onClose={() => setBackupOpen(false)} width={520}>
         <div className="backup">
           <p className="backup-note">
-            글은 이 브라우저에 자동 저장돼요. 브라우저 데이터를 지우면 사라질 수 있으니 주기적으로 내보내 주세요.
+            공개 글은 GitHub 저장소(<code>public/data/posts.json</code>)에 있어요. 발행 전 글은 이 브라우저에만 있으니 주기적으로 내보내 주세요.
           </p>
           <h3>내보내기</h3>
           <div className="backup-grid">
@@ -107,7 +142,7 @@ export default function JournalList() {
           <button className="backup-btn wide" onClick={() => fileRef.current?.click()}>
             <Icon name="upload" size={20} />
             <strong>JSON / Markdown 파일 불러오기</strong>
-            <span>같은 id의 글은 덮어쓰고, 새 글은 추가돼요</span>
+            <span>같은 id의 글은 덮어쓰고, 새 글은 추가돼요. 불러온 뒤 「모두 발행」으로 공개해요</span>
           </button>
           <input
             ref={fileRef}
@@ -121,11 +156,11 @@ export default function JournalList() {
             }}
           />
           <h3>모든 방문자에게 공개하기</h3>
-          <button className="backup-btn wide" onClick={async () => (await io()).exportPublishJSON(posts)}>
+          <button className="backup-btn wide" onClick={publishAll} disabled={!pendingCount || publishing}>
             <Icon name="upload" size={20} />
-            <strong>게시용 journal.json 받기</strong>
+            <strong>{publishing ? '발행 중…' : `변경사항 ${pendingCount}건 GitHub에 발행`}</strong>
             <span>
-              받은 파일로 저장소의 <code>src/data/journal.json</code>을 교체하고 push하면 사이트에 공개돼요.
+              <code>public/data/posts.json</code>과 사진을 저장소에 커밋하면 GitHub Actions가 사이트를 다시 배포해요.
             </span>
           </button>
         </div>

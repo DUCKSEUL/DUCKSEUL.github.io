@@ -1,5 +1,6 @@
 name: Deploy to GitHub Pages
 
+# main에 커밋이 올라오면(로컬 push든, 관리자 모드에서 브라우저로 발행한 글이든) 자동으로 빌드·배포합니다.
 on:
   push:
     branches: [main]
@@ -10,9 +11,10 @@ permissions:
   pages: write
   id-token: write
 
+# 연달아 발행해도 진행 중인 배포는 끝까지 마치고, 대기 중인 것은 최신 커밋 하나만 남깁니다.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:

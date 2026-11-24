@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon, useDocumentTitle } from '../components/ui.jsx'
 import { usePosts, formatDateTime, postThumb } from '../lib/store.js'
+import { useAdmin } from '../lib/admin.js'
 import { profile, researchAreas, keywords, highlights, defaultTodos } from '../data/profile.js'
 
 function useLocalState(key, initial) {
@@ -89,6 +90,7 @@ function ResearchWidget() {
 }
 
 function JournalWidget({ posts }) {
+  const { isAdmin } = useAdmin()
   const latest = posts.filter((p) => !p.draft).slice(0, 4)
   return (
     <Widget
@@ -122,9 +124,11 @@ function JournalWidget({ posts }) {
       ) : (
         <p className="w-empty">아직 일지가 없어요.</p>
       )}
-      <Link to="/write" className="w-write">
-        <Icon name="pen" size={16} /> 새 일지 쓰기
-      </Link>
+      {isAdmin && (
+        <Link to="/write" className="w-write">
+          <Icon name="pen" size={16} /> 새 일지 쓰기
+        </Link>
+      )}
     </Widget>
   )
 }
@@ -151,6 +155,7 @@ function HighlightsWidget() {
 }
 
 function TodoWidget() {
+  const { isAdmin } = useAdmin()
   const [tab, setTab] = useState('todo')
   const [todos, setTodos] = useLocalState('dash-todos', defaultTodos)
   const [memo, setMemo] = useLocalState('dash-memo', '')
@@ -171,9 +176,11 @@ function TodoWidget() {
           <button role="tab" aria-selected={tab === 'todo'} className={tab === 'todo' ? 'is-active' : ''} onClick={() => setTab('todo')}>
             진행 중인 작업
           </button>
-          <button role="tab" aria-selected={tab === 'memo'} className={tab === 'memo' ? 'is-active' : ''} onClick={() => setTab('memo')}>
-            빠른 메모
-          </button>
+          {isAdmin && (
+            <button role="tab" aria-selected={tab === 'memo'} className={tab === 'memo' ? 'is-active' : ''} onClick={() => setTab('memo')}>
+              빠른 메모
+            </button>
+          )}
         </div>
         {tab === 'todo' && (
           <span className="w-count">
@@ -181,7 +188,7 @@ function TodoWidget() {
           </span>
         )}
       </header>
-      {tab === 'todo' ? (
+      {tab === 'todo' || !isAdmin ? (
         <>
           <div className="progress" aria-hidden>
             <span style={{ width: `${todos.length ? (done / todos.length) * 100 : 0}%` }} />
@@ -193,6 +200,7 @@ function TodoWidget() {
                   <input
                     type="checkbox"
                     checked={t.done}
+                    disabled={!isAdmin}
                     onChange={() => setTodos(todos.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)))}
                   />
                   <span className="check" aria-hidden>
@@ -200,18 +208,22 @@ function TodoWidget() {
                   </span>
                   <span className="todo-text">{t.text}</span>
                 </label>
+                {isAdmin && (
                 <button className="todo-del" onClick={() => setTodos(todos.filter((x) => x.id !== t.id))} aria-label="삭제">
                   <Icon name="close" size={14} />
                 </button>
+                )}
               </li>
             ))}
           </ul>
+          {isAdmin && (
           <form className="todo-add" onSubmit={add}>
             <input value={text} onChange={(e) => setText(e.target.value)} placeholder="할 일 추가" aria-label="할 일 추가" />
             <button type="submit" aria-label="추가">
               <Icon name="plus" size={18} />
             </button>
           </form>
+          )}
         </>
       ) : (
         <textarea
@@ -222,7 +234,7 @@ function TodoWidget() {
           aria-label="빠른 메모"
         />
       )}
-      <p className="w-foot">이 브라우저에 자동 저장돼요</p>
+      {isAdmin && <p className="w-foot">이 브라우저에 자동 저장돼요</p>}
     </Widget>
   )
 }
@@ -256,21 +268,37 @@ function StatsWidget({ posts }) {
 }
 
 function QuickWidget({ posts }) {
+  const { isAdmin } = useAdmin()
+  const latest = posts.find((p) => !p.draft)
   return (
     <Widget area="quick" title="바로가기" icon="arrowRight" className="w-quick">
       <div className="quick">
-        <Link to="/write" className="quick-item blue">
-          <Icon name="pen" size={20} />
-          <span>새 일지</span>
-        </Link>
+        {isAdmin ? (
+          <Link to="/write" className="quick-item blue">
+            <Icon name="pen" size={20} />
+            <span>새 일지</span>
+          </Link>
+        ) : (
+          <Link to={latest ? `/journal/${latest.id}` : '/journal'} className="quick-item blue">
+            <Icon name="note" size={20} />
+            <span>최근 글</span>
+          </Link>
+        )}
         <Link to="/journal" className="quick-item purple">
           <Icon name="book" size={20} />
           <span>일지 목록</span>
         </Link>
-        <button className="quick-item green" onClick={async () => (await import('../lib/exportImport.js')).exportJSON(posts)}>
-          <Icon name="download" size={20} />
-          <span>백업</span>
-        </button>
+        {isAdmin ? (
+          <button className="quick-item green" onClick={async () => (await import('../lib/exportImport.js')).exportJSON(posts)}>
+            <Icon name="download" size={20} />
+            <span>백업</span>
+          </button>
+        ) : (
+          <a href={profile.email ? `mailto:${profile.email}` : profile.github} className="quick-item green">
+            <Icon name="mail" size={20} />
+            <span>연락하기</span>
+          </a>
+        )}
         <a href={profile.github} target="_blank" rel="noreferrer" className="quick-item dark">
           <Icon name="github" size={20} />
           <span>GitHub</span>

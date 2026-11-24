@@ -6,7 +6,7 @@ import path from 'node:path'
 const dist = 'dist'
 const SITE = 'https://duckseul.github.io'
 const template = fs.readFileSync(path.join(dist, 'index.html'), 'utf8')
-const posts = JSON.parse(fs.readFileSync('src/data/journal.json', 'utf8'))
+const posts = JSON.parse(fs.readFileSync('public/data/posts.json', 'utf8'))
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 const text = (html) =>

@@ -8,7 +8,9 @@ import MathPopover from '../editor/MathPopover.jsx'
 import TableToolbar from '../editor/TableToolbar.jsx'
 import Modal from '../components/Modal.jsx'
 import { Icon, toast, useDocumentTitle } from '../components/ui.jsx'
-import { usePosts, savePost, newId } from '../lib/store.js'
+import { usePosts, savePost, newId, markSynced } from '../lib/store.js'
+import { useAdmin } from '../lib/admin.js'
+import AdminOnly from '../components/AdminOnly.jsx'
 import { saveDraft, loadDraft, clearDraft, relativeTime } from '../lib/drafts.js'
 import { fileToDataUrl, imageFiles } from '../lib/image.js'
 import NotFound from './NotFound.jsx'
@@ -18,7 +20,9 @@ const AUTOSAVE_MS = 2000
 export default function Write() {
   const { id } = useParams()
   const { posts, ready } = usePosts()
-  if (id && !ready) return <div className="page" />
+  const { status, isAdmin } = useAdmin()
+  if (status === 'checking' || (id && !ready)) return <div className="page" />
+  if (!isAdmin) return <AdminOnly />
   const existing = id ? posts.find((p) => p.id === id) : null
   if (id && !existing) return <NotFound />
   return <EditorPage key={id || 'new'} initial={existing} categories={[...new Set(posts.map((p) => p.category).filter(Boolean))]} />
@@ -62,6 +66,7 @@ function EditorPage({ initial, categories }) {
   const [recovery, setRecovery] = useState(null)
   const [mathState, setMathState] = useState(null)
   const [linkState, setLinkState] = useState(null)
+  const [publishing, setPublishing] = useState(false)
   const fileRef = useRef(null)
   const editorRef = useRef(null)
   const dirty = useRef(false)
@@ -301,27 +306,42 @@ function EditorPage({ initial, categories }) {
       document.getElementById('post-title')?.focus()
       return
     }
+    const post = {
+      id: postId,
+      title: title.trim(),
+      category: category.trim() || '연구 노트',
+      tags: tags
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean),
+      createdAt: createdAt.current,
+      updatedAt: new Date().toISOString(),
+      draft: false,
+      html: editor.getHTML(),
+    }
+    // 1) 먼저 이 브라우저에 저장 (GitHub 발행이 실패해도 글이 사라지지 않도록)
     try {
-      await savePost({
-        id: postId,
-        title: title.trim(),
-        category: category.trim() || '연구 노트',
-        tags: tags
-          .split(',')
-          .map((t) => t.trim())
-          .filter(Boolean),
-        createdAt: createdAt.current,
-        updatedAt: new Date().toISOString(),
-        draft: false,
-        html: editor.getHTML(),
-      })
+      await savePost(post)
       await clearDraft(draftKey)
       dirty.current = false
-      toast(initial ? '수정했어요.' : '발행했어요! 이 브라우저에 저장되었어요.')
-      navigate(`/journal/${postId}`)
     } catch {
       toast('저장 공간이 부족해 저장하지 못했어요. 백업 후 다시 시도해 주세요.', 'error')
+      return
     }
+    // 2) GitHub 저장소에 커밋 → Actions가 사이트를 다시 배포
+    setPublishing(true)
+    try {
+      const { publishChanges } = await import('../lib/publish.js')
+      await publishChanges({ upserts: [post] })
+      await markSynced([post.id])
+      toast('GitHub에 발행했어요! 1~2분 뒤 모든 방문자에게 반영돼요.')
+    } catch (e) {
+      console.warn(e)
+      toast(`GitHub 발행 실패: ${e.message} — 이 브라우저에 저장해 두었어요. 목록에서 다시 발행할 수 있어요.`, 'error')
+    } finally {
+      setPublishing(false)
+    }
+    navigate(`/journal/${postId}`)
   }
 
   const counts = countChars(editor)
@@ -334,8 +354,8 @@ function EditorPage({ initial, categories }) {
             <Icon name="chevronLeft" size={18} /> <span className="hide-sm">{initial ? '글로 돌아가기' : '연구 일지'}</span>
           </Link>
           <SaveBadge savedAt={savedAt} saving={saving} />
-          <button className="btn btn-md btn-primary" onClick={publish}>
-            {initial ? '수정 완료' : '발행하기'}
+          <button className="btn btn-md btn-primary" onClick={publish} disabled={publishing}>
+            {publishing ? '발행 중…' : initial ? '수정 발행' : '발행 (Publish)'}
           </button>
         </div>
         <div className="toolbar-wrap">

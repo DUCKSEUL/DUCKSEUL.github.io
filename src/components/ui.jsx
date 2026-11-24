@@ -161,7 +161,7 @@ export function ToastHost() {
   useEffect(() => {
     pushToast = (t) => {
       setItems((list) => [...list, t])
-      setTimeout(() => setItems((list) => list.filter((x) => x.id !== t.id)), 3200)
+      setTimeout(() => setItems((list) => list.filter((x) => x.id !== t.id)), t.tone === 'error' ? 7000 : 3200)
     }
     return () => {
       pushToast = () => {}

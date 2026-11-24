@@ -6,7 +6,8 @@ import { Icon, toast, useDocumentTitle } from '../components/ui.jsx'
 import Lightbox from '../components/Lightbox.jsx'
 import Modal from '../components/Modal.jsx'
 import BackToTop from '../components/BackToTop.jsx'
-import { usePosts, deletePost, formatDateTime } from '../lib/store.js'
+import { usePosts, deletePost, markSynced, formatDateTime } from '../lib/store.js'
+import { useAdmin } from '../lib/admin.js'
 import { renderMathIn } from '../lib/math.js'
 import NotFound from './NotFound.jsx'
 
@@ -39,6 +40,8 @@ export default function JournalPost() {
   const [lightbox, setLightbox] = useState(null)
   const [copying, setCopying] = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const { isAdmin } = useAdmin()
   const [toc, setToc] = useState([])
   const [active, setActive] = useState(null)
   const [tocOpen, setTocOpen] = useState(false)
@@ -123,7 +126,7 @@ export default function JournalPost() {
           <h1>{post.title}</h1>
           <div className="post-head-row">
             <p className="post-date">
-              <strong>{post.source === 'published' ? 'DUCKSEUL' : '나'}</strong>
+              <strong>DUCKSEUL</strong>
               <span>{formatDateTime(post.createdAt)}</span>
               {post.updatedAt && post.updatedAt !== post.createdAt && <span>· 수정 {formatDateTime(post.updatedAt)}</span>}
             </p>
@@ -131,12 +134,16 @@ export default function JournalPost() {
               <button className="btn btn-sm btn-naver" onClick={copyNaver} disabled={copying}>
                 <Icon name="copy" size={16} /> {copying ? '변환 중…' : '네이버 블로그용 복사'}
               </button>
-              <Link className="btn btn-sm btn-ghost" to={`/write/${post.id}`}>
-                <Icon name="pen" size={16} /> 수정
-              </Link>
-              <button className="btn btn-sm btn-ghost" onClick={() => setConfirmDel(true)} aria-label="삭제">
-                <Icon name="trash" size={16} />
-              </button>
+              {isAdmin && (
+                <>
+                  <Link className="btn btn-sm btn-ghost" to={`/write/${post.id}`}>
+                    <Icon name="pen" size={16} /> 수정
+                  </Link>
+                  <button className="btn btn-sm btn-ghost" onClick={() => setConfirmDel(true)} aria-label="삭제">
+                    <Icon name="trash" size={16} />
+                  </button>
+                </>
+              )}
             </div>
           </div>
           {post.tags?.length > 0 && (
@@ -207,21 +214,33 @@ export default function JournalPost() {
             </button>
             <button
               className="btn btn-md btn-danger"
+              disabled={deleting}
               onClick={async () => {
-                await deletePost(post.id)
-                toast('삭제했어요.')
+                setDeleting(true)
+                const { id, title } = post
+                const wasPublished = await deletePost(id)
                 navigate('/journal')
+                if (!wasPublished) return toast('삭제했어요.')
+                toast('GitHub에 삭제를 반영하는 중…')
+                try {
+                  const { publishChanges } = await import('../lib/publish.js')
+                  await publishChanges({ deletes: [id], message: `journal: 「${title}」 삭제` })
+                  await markSynced([id])
+                  toast('GitHub에서 삭제했어요. 1~2분 뒤 사이트에 반영돼요.')
+                } catch (e) {
+                  toast(`GitHub 반영 실패: ${e.message} — 목록에서 다시 발행할 수 있어요.`, 'error')
+                }
               }}
             >
-              삭제
+              {deleting ? '삭제 중…' : '삭제'}
             </button>
           </>
         }
       >
         <p className="modal-text">
           {post.source === 'local'
-            ? '이 브라우저에 저장된 글이 삭제돼요. 되돌릴 수 없어요.'
-            : '공개된 글은 이 브라우저에서만 숨겨져요. 완전히 지우려면 저장소의 journal.json에서 제거해 주세요.'}
+            ? '아직 발행하지 않은 글이에요. 이 브라우저에서 삭제되고 되돌릴 수 없어요.'
+            : 'GitHub 저장소의 posts.json에서 이 글을 지우는 커밋을 올려요. 배포가 끝나면 모든 방문자에게서 사라져요.'}
         </p>
       </Modal>
     </article>

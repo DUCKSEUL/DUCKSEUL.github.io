@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { Icon } from './ui.jsx'
 import { profile } from '../data/profile.js'
+import { useAdmin, logout } from '../lib/admin.js'
+import AdminLogin from './AdminLogin.jsx'
 
 function useTheme() {
   const [theme, setTheme] = useState(() => {
@@ -27,6 +29,8 @@ function useTheme() {
 
 export default function Header() {
   const [isDark, toggle] = useTheme()
+  const { isAdmin, user } = useAdmin()
+  const [loginOpen, setLoginOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 4)
@@ -58,12 +62,32 @@ export default function Header() {
           <button className="icon-btn" onClick={toggle} aria-label="테마 전환">
             <Icon name={isDark ? 'sun' : 'moon'} size={20} />
           </button>
-          <Link className="btn btn-sm btn-primary" to="/write">
-            <Icon name="pen" size={16} />
-            <span className="hide-sm">글쓰기</span>
-          </Link>
+          {isAdmin ? (
+            <>
+              <Link className="btn btn-sm btn-primary" to="/write">
+                <Icon name="pen" size={16} />
+                <span className="hide-sm">글쓰기</span>
+              </Link>
+              <button
+                className="admin-chip is-on"
+                onClick={() => {
+                  if (window.confirm('관리자 모드에서 로그아웃할까요? 저장된 토큰이 이 브라우저에서 삭제돼요.')) logout()
+                }}
+                title={`${user?.login} · 클릭하면 로그아웃`}
+                aria-label="관리자 로그아웃"
+              >
+                {user?.avatar ? <img src={user.avatar} alt="" /> : <span className="admin-dot" />}
+                <span className="hide-sm">Admin</span>
+              </button>
+            </>
+          ) : (
+            <button className="admin-chip" onClick={() => setLoginOpen(true)} aria-label="관리자 로그인">
+              Admin
+            </button>
+          )}
         </div>
       </div>
+      <AdminLogin open={loginOpen} onClose={() => setLoginOpen(false)} />
     </header>
   )
 }
