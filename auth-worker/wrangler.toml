@@ -1,0 +1,15 @@
+# GitHub 로그인 중계 서버 (Cloudflare Worker)
+# 배포: 이 폴더에서 `npx wrangler@4 deploy`
+name = "duckseul-auth"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+
+[vars]
+# GitHub App의 Client ID (공개 값)
+GITHUB_CLIENT_ID = "Iv23li86mUCNo2TQetRK"
+# 로그인 후 돌아갈 수 있는 사이트 주소 (쉼표로 구분)
+ALLOWED_ORIGINS = "https://duckseul.github.io,http://localhost:5173,http://localhost:4173"
+# 로그인을 허용할 GitHub 계정 (쉼표로 구분)
+ALLOWED_USERS = "DUCKSEUL"
+
+# 비밀 키는 여기에 쓰지 말고 `npx wrangler@4 secret put GITHUB_CLIENT_SECRET`으로 등록하세요.

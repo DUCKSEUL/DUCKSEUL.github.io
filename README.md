@@ -18,9 +18,13 @@
 
 ## 관리자 모드 (GitHub API 기반 CMS)
 - 일반 방문자에게는 글쓰기·수정·삭제·불러오기 버튼이 보이지 않습니다. (`/write`는 "관리자 전용" 안내)
-- 상단 메뉴 오른쪽 **Admin** → GitHub Personal Access Token 입력 → 이 저장소에 push 권한이 확인되면 관리자 모드가 켜집니다.
-  - 토큰은 이 브라우저의 `localStorage`(`admin-gh-token`)에만 저장됩니다. 초록색 Admin 버튼을 누르면 로그아웃(토큰 삭제).
-  - 권장 토큰: [Fine-grained token](https://github.com/settings/personal-access-tokens/new) · Repository access는 `DUCKSEUL.github.io`만 · Permissions → **Contents: Read and write**.
+- 상단 메뉴 오른쪽 **Admin** → **GitHub로 로그인** → GitHub 승인 화면 → 사이트로 돌아오면 관리자 모드가 켜집니다.
+  - GitHub App(`Contents: Read and write`, 이 저장소에만 설치) + Cloudflare Worker(`auth-worker/`)로 OAuth 토큰을 교환합니다.
+    Client Secret은 Worker에만 있고, 토큰은 URL `#fragment`로 전달된 뒤 즉시 주소창에서 지워집니다.
+  - `auth-worker/wrangler.toml`의 `ALLOWED_USERS`(기본 `DUCKSEUL`) 계정만 로그인할 수 있습니다.
+  - 토큰은 이 브라우저의 `localStorage`(`admin-gh-token`)에만 저장되고 8시간 뒤 만료됩니다. 초록색 Admin 버튼을 누르면 로그아웃.
+  - 예비 수단: 로그인 창의 "토큰으로 직접 로그인"에 Fine-grained PAT(이 저장소만, Contents: Read and write) 입력.
+- Worker 배포/수정: `cd auth-worker && npx wrangler@4 deploy`, 비밀 키: `npx wrangler@4 secret put GITHUB_CLIENT_SECRET`.
 - 화면을 숨기는 것은 편의 기능이고, 실제 쓰기 권한은 토큰이 결정합니다. 토큰이 없으면 아무도 저장소를 바꿀 수 없습니다.
 
 ## 연구 일지 저장 방식

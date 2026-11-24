@@ -749,3 +749,19 @@
 .admin-gate p {
   color: var(--g600);
 }
+.admin-login {
+  display: grid;
+  gap: 16px;
+}
+.gh-login {
+  width: 100%;
+}
+.token-alt summary {
+  cursor: pointer;
+  color: var(--g500);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+.token-alt[open] summary {
+  margin-bottom: 14px;
+}

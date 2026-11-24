@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
-import { Icon } from './ui.jsx'
+import { Icon, toast } from './ui.jsx'
 import { profile } from '../data/profile.js'
-import { useAdmin, logout } from '../lib/admin.js'
+import { useAdmin, logout, clearLoginMessages } from '../lib/admin.js'
 import AdminLogin from './AdminLogin.jsx'
 
 function useTheme() {
@@ -29,7 +29,13 @@ function useTheme() {
 
 export default function Header() {
   const [isDark, toggle] = useTheme()
-  const { isAdmin, user } = useAdmin()
+  const { isAdmin, user, error, notice } = useAdmin()
+  useEffect(() => {
+    if (!error && !notice) return
+    if (error) toast(`GitHub 로그인 실패: ${error}`, 'error')
+    else toast(notice)
+    clearLoginMessages()
+  }, [error, notice])
   const [loginOpen, setLoginOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   useEffect(() => {

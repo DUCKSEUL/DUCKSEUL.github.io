@@ -2,9 +2,10 @@
 // 저장소에 push 권한이 있는 토큰일 때만 글쓰기/수정/삭제/불러오기 UI를 보여 줍니다.
 // ※ 화면을 숨기는 것은 편의 기능일 뿐, 실제 쓰기 권한은 GitHub 토큰이 결정합니다.
 import { useSyncExternalStore } from 'react'
-import { REPO } from '../config.js'
+import { REPO, AUTH_URL } from '../config.js'
 
 const KEY = 'admin-gh-token'
+const NONCE_KEY = 'admin-gh-nonce'
 const API = 'https://api.github.com'
 
 function readToken() {
@@ -15,8 +16,26 @@ function readToken() {
   }
 }
 
+// GitHub 로그인 후 돌아온 경우: 주소의 #gh_token=…&nonce=… 를 읽고 바로 지움
+function takeRedirectResult() {
+  if (typeof location === 'undefined' || !/[#&](gh_token|gh_error)=/.test(location.hash)) return null
+  const params = new URLSearchParams(location.hash.slice(1))
+  history.replaceState(history.state, '', location.pathname + location.search)
+  let expected = null
+  try {
+    expected = sessionStorage.getItem(NONCE_KEY)
+    sessionStorage.removeItem(NONCE_KEY)
+  } catch {
+    /* ignore */
+  }
+  if (!expected || params.get('nonce') !== expected) return { error: '로그인 요청을 확인하지 못했어요. 다시 시도해 주세요.' }
+  if (params.get('gh_error')) return { error: params.get('gh_error') }
+  return { token: params.get('gh_token') }
+}
+const redirectResult = takeRedirectResult()
+
 // status: 'guest' | 'checking' | 'admin'
-let state = { status: readToken() ? 'checking' : 'guest', user: null }
+let state = { status: readToken() || redirectResult?.token ? 'checking' : 'guest', user: null, error: redirectResult?.error || null }
 const listeners = new Set()
 function setState(next) {
   state = { ...state, ...next }
@@ -32,6 +51,24 @@ export function useAdmin() {
     () => state,
   )
   return { ...s, isAdmin: s.status === 'admin' }
+}
+
+export const hasGitHubLogin = !!AUTH_URL
+
+/** GitHub 로그인 화면으로 이동 (Worker를 거쳐 다시 이 페이지로 돌아옴) */
+export function loginWithGitHub() {
+  const nonce = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('')
+  try {
+    sessionStorage.setItem(NONCE_KEY, nonce)
+  } catch {
+    /* ignore */
+  }
+  const redirect = location.origin + location.pathname + location.search
+  location.assign(`${AUTH_URL}/login?redirect=${encodeURIComponent(redirect)}&nonce=${nonce}`)
+}
+
+export function clearLoginMessages() {
+  setState({ error: null, notice: null })
 }
 
 export function getToken() {
@@ -92,7 +129,7 @@ export async function login(token) {
   } catch {
     throw new Error('이 브라우저에서는 localStorage를 쓸 수 없어요.')
   }
-  setState({ status: 'admin', user })
+  setState({ status: 'admin', user, error: null })
   return user
 }
 
@@ -105,8 +142,17 @@ export function logout() {
   setState({ status: 'guest', user: null })
 }
 
-// 저장된 토큰이 있으면 페이지 로드 시 한 번 검증
+// 페이지 로드 시: GitHub 로그인에서 막 돌아왔으면 그 토큰으로, 아니면 저장된 토큰을 한 번 검증
 ;(async () => {
+  if (redirectResult?.token) {
+    try {
+      const user = await login(redirectResult.token)
+      setState({ notice: `관리자 모드가 켜졌어요. (${user.login})` })
+    } catch (e) {
+      setState({ status: 'guest', error: e.message })
+    }
+    return
+  }
   const token = readToken()
   if (!token) return
   try {

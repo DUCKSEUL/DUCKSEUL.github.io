@@ -152,7 +152,9 @@ export function useDocumentTitle(title) {
 }
 
 /* ── Toast ─────────────────────────────── */
-let pushToast = () => {}
+// 알림 영역이 준비되기 전에 호출된 알림은 모아 두었다가 준비되면 표시
+const early = []
+let pushToast = (t) => early.push(t)
 export function toast(message, tone = 'default') {
   pushToast({ message, tone, id: Math.random() })
 }
@@ -163,8 +165,9 @@ export function ToastHost() {
       setItems((list) => [...list, t])
       setTimeout(() => setItems((list) => list.filter((x) => x.id !== t.id)), t.tone === 'error' ? 7000 : 3200)
     }
+    early.splice(0).forEach((t) => pushToast(t))
     return () => {
-      pushToast = () => {}
+      pushToast = (t) => early.push(t)
     }
   }, [])
   return (
