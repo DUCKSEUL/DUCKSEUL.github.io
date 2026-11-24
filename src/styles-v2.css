@@ -795,3 +795,15 @@
   font-weight: 700;
   white-space: nowrap;
 }
+.btn-outline {
+  border: 1.5px solid var(--blue);
+  background: var(--surface);
+  color: var(--blue);
+}
+.btn-outline:hover:not(:disabled) {
+  background: var(--blue-weak);
+}
+.btn-outline .btn-kbd {
+  background: var(--blue-weak);
+  color: var(--blue-weak-text);
+}

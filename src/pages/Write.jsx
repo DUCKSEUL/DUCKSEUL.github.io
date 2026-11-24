@@ -335,8 +335,7 @@ function EditorPage({ initial, categories }) {
       await clearDraft(draftKey)
       dirty.current = false
       setPrivateAt(Date.now())
-      // 새 글이면 주소를 /write/:id 로 바꿔 새로고침해도 이어서 쓸 수 있게 (에디터는 그대로 유지)
-      if (!initial) window.history.replaceState(window.history.state, '', `/write/${postId}`)
+      navigate('/journal')
       toast(initial?.source === 'published' || initial?.source === 'modified' ? '저장했어요. 공개된 글은 발행 전까지 그대로예요.' : '저장했어요. 나에게만 보여요.')
     } catch {
       toast('저장 공간이 부족해 저장하지 못했어요. 백업 후 다시 시도해 주세요.', 'error')
@@ -386,8 +385,8 @@ function EditorPage({ initial, categories }) {
             <Icon name="chevronLeft" size={18} /> <span className="hide-sm">{initial ? '글로 돌아가기' : '연구 일지'}</span>
           </Link>
           <SaveBadge savedAt={savedAt} saving={saving} privateAt={privateAt} />
-          <button className="btn btn-md btn-ghost" onClick={savePrivate} disabled={publishing} title="나만 보이게 저장 (Ctrl+S)">
-            저장<span className="hide-sm btn-kbd">Ctrl+S</span>
+          <button className="btn btn-md btn-outline" onClick={savePrivate} disabled={publishing} title="나만 보이게 저장하고 목록으로 (Ctrl+S)">
+            <Icon name="check" size={16} strokeWidth={2.5} /> 저장<span className="hide-sm btn-kbd">Ctrl+S</span>
           </button>
           <button className="btn btn-md btn-primary" onClick={publish} disabled={publishing} title="모든 방문자에게 공개">
             {publishing ? '발행 중…' : initial && initial.source !== 'local' ? '수정 발행' : '발행 (Publish)'}
