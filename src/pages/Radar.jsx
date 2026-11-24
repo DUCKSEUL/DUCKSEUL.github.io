@@ -80,6 +80,11 @@ function PaperCard({ p, rank }) {
           <Icon name="calendar" size={12} /> {fmt(p.date) || '날짜 없음'}
         </span>
         {p.important && <em className="hl-badge">★ 중요</em>}
+        {p.importance && !p.important && (
+          <em className="grade-badge" title="중요도/등급">
+            {p.importance}
+          </em>
+        )}
         {p.status && <em className={`status-tag st-${tone}`}>{p.status}</em>}
       </p>
       <h3>{p.title}</h3>
@@ -91,6 +96,7 @@ function PaperCard({ p, rank }) {
         </p>
       )}
       {p.summary && <p className="paper-sum">{p.summary}</p>}
+      {p.comment && <p className="paper-comment">💬 {p.comment}</p>}
       <div className="paper-foot">
         {p.tags.length > 0 && (
           <p className="paper-tags">
@@ -131,6 +137,7 @@ function PaperTable({ papers }) {
               <th scope="row">
                 {p.title}
                 {p.summary && <small>{p.summary}</small>}
+                {p.comment && <small className="tbl-comment">💬 {p.comment}</small>}
               </th>
               <td>{p.authors}</td>
               <td>{p.venue}</td>
@@ -179,16 +186,16 @@ export default function Radar() {
 
   const sorted = useSortedPapers(sheet.data, order)
   const tags = useMemo(() => tally(sorted, (p) => p.tags).sort((a, b) => b[1] - a[1]), [sorted])
-  const venues = useMemo(() => tally(sorted, (p) => p.venue).sort((a, b) => b[1] - a[1]).slice(0, 12), [sorted])
+  const venues = useMemo(() => tally(sorted, (p) => p.venueKey).sort((a, b) => b[1] - a[1]).slice(0, 12), [sorted])
   const years = useMemo(() => tally(sorted, (p) => p.year).sort((a, b) => String(b[0]).localeCompare(String(a[0]))), [sorted])
   const needle = q.trim().toLowerCase()
   const shown = sorted.filter(
     (p) =>
       (!tag || p.tags.includes(tag)) &&
-      (!venue || p.venue === venue) &&
+      (!venue || p.venueKey === venue) &&
       (!year || p.year === year) &&
       (!onlyImportant || p.important) &&
-      (!needle || [p.title, p.authors, p.venue, p.summary, p.year, p.tags.join(' ')].join(' ').toLowerCase().includes(needle)),
+      (!needle || [p.title, p.authors, p.venue, p.summary, p.comment, p.year, p.tags.join(' ')].join(' ').toLowerCase().includes(needle)),
   )
   const importantCount = sorted.filter((p) => p.important).length
   const filtered = tag || venue || year || onlyImportant || needle

@@ -15,16 +15,17 @@ import { useAdmin } from './admin.js'
 import { useGoogle, gapi } from './google.js'
 
 export const ROLE_DEFS = [
-  { role: 'date', label: '기록일', names: ['기록일', '등록일', '날짜', '추가일', '기록 날짜', 'date', 'added', 'recorded', 'logged'] },
+  { role: 'date', label: '기록일', names: ['기록일', '등록일', '날짜', '추가일', '기록 날짜', '큐레이션 날짜', '정리일', 'date', 'added', 'recorded', 'logged', 'curated'] },
   { role: 'title', label: '제목', names: ['제목', '논문 제목', '논문제목', '논문', 'title', 'paper', 'name'] },
   { role: 'authors', label: '저자', names: ['저자', '저자명', 'author', 'authors', 'by'] },
-  { role: 'venue', label: '저널/학회', names: ['저널/학회', '저널', '학회', '출처', '게재지', 'venue', 'journal', 'conference', 'source', 'publication'] },
+  { role: 'venue', label: '저널/학회', names: ['저널/학회', '저널', '학회', '출처', '게재지', '출판 정보', '출판', '게재', 'venue', 'journal', 'conference', 'source', 'publication'] },
   { role: 'year', label: '발행연도', names: ['발행연도', '연도', '년도', '출판연도', 'year', 'pub year', 'published'] },
   { role: 'tags', label: '키워드/태그', names: ['키워드/태그', '키워드', '태그', '분야', 'keyword', 'keywords', 'tag', 'tags', 'topic'] },
   { role: 'summary', label: '한줄요약', names: ['한줄요약', '한 줄 요약', '요약', '메모', 'summary', 'note', 'notes', 'tl;dr', 'abstract'] },
   { role: 'link', label: 'DOI/원문 링크', names: ['doi/원문 링크', '원문 링크', '원문', '링크', '주소', 'doi', 'url', 'link', 'pdf'] },
-  { role: 'importance', label: '중요도', names: ['중요도', '중요', '우선순위', 'importance', 'priority', 'star', 'stars', 'rating'] },
+  { role: 'importance', label: '중요도', names: ['중요도', '중요', '우선순위', '순위/등급', '등급', '순위', 'importance', 'priority', 'rank', 'grade', 'star', 'stars', 'rating'] },
   { role: 'status', label: '읽음상태', names: ['읽음상태', '읽음 상태', '상태', '읽음', 'status', 'read', 'state'] },
+  { role: 'comment', label: '내 코멘트', names: ['소감', '코멘트', '내 평가', '한줄 소감', '평가', 'comment', 'my note', 'review'] },
 ]
 const norm = (s) =>
   String(s || '')
@@ -54,7 +55,7 @@ export function detectRoles(headers, overrides = {}) {
       }
     })
   pass((n, x) => n === x || n.replace(/\s/g, '') === x.replace(/\s/g, ''))
-  pass((n, x) => x.length > 2 && n.includes(x))
+  pass((n, x) => (/[^a-z0-9 ]/i.test(x) ? x.length >= 2 : x.length > 2) && n.includes(x))
   if (map.title === undefined) {
     const i = headers.findIndex((_, k) => !used.has(k))
     if (i >= 0) map.title = i
@@ -92,6 +93,7 @@ export function isImportant(v) {
   if (!s) return false
   if ((s.match(/[★⭐]/g) || []).length >= 3) return true
   if (/^(높음|상|중요|매우 중요|필독|high|important|must|y|yes|true|o|✓|✔|!+)$/.test(s)) return true
+  if (/(^|[\s(])(s|a\+)\)?$/.test(s)) return true // 최상위 등급 S·A+ (예: '1 (S)'). 일반 A·B 등급은 배지로만 표시
   const n = Number(s)
   return !Number.isNaN(n) && n >= 3
 }
@@ -104,14 +106,17 @@ export function toPapers(headers, rows, overrides) {
       const linkRaw = get(row, 'link')
       const doi = linkRaw.match(/\b(10\.\d{4,9}\/\S+)/)?.[1]
       const link = /^https?:\/\//i.test(linkRaw) ? linkRaw : doi ? `https://doi.org/${doi}` : ''
-      const year = get(row, 'year').match(/\d{4}/)?.[0] || get(row, 'year')
+      const venue = get(row, 'venue')
+      // 발행연도 열이 없으면 출판 정보(예: 'arXiv …, 2026')에서 연도 추출
+      const year = get(row, 'year').match(/\d{4}/)?.[0] || get(row, 'year') || venue.match(/(?:19|20)\d{2}(?!.*(?:19|20)\d{2})/)?.[0] || ''
       return {
         id: `row-${rowIndex}`,
         rowIndex,
         date: normDate(get(row, 'date')),
         title: get(row, 'title'),
         authors: get(row, 'authors'),
-        venue: get(row, 'venue'),
+        venue,
+        venueKey: venue.split(/[,(（]/)[0].trim() || venue, // 필터 칩용 이름 (예: 'arXiv (physics.optics), 2026' → 'arXiv')
         year,
         tags: splitTags(get(row, 'tags')),
         summary: get(row, 'summary'),
@@ -119,6 +124,7 @@ export function toPapers(headers, rows, overrides) {
         importance: get(row, 'importance'),
         important: isImportant(get(row, 'importance')),
         status: get(row, 'status'),
+        comment: get(row, 'comment'),
         raw: row,
       }
     })

@@ -1669,3 +1669,35 @@ a.ev-title:hover {
     justify-content: center;
   }
 }
+.paper-comment,
+.sheet-table small.tbl-comment {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: 0.86rem;
+  color: var(--g700);
+}
+.sheet-table small.tbl-comment {
+  display: block;
+  margin-top: 6px;
+  padding: 4px 8px;
+}
+.grade-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 7px;
+  background: var(--fill);
+  color: var(--g700);
+  font-size: 0.74rem;
+  font-weight: 800;
+  font-style: normal;
+  white-space: nowrap;
+}
+.venue-badge {
+  height: auto;
+  min-height: 22px;
+  padding: 3px 8px;
+  line-height: 1.35;
+}
