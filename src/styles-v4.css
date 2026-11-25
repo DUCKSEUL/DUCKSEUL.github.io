@@ -1086,3 +1086,31 @@ li.paper,
   flex: none;
   margin: 0 auto;
 }
+
+/* ── 에디터: Alt+C 모양 복사/적용 미니 알림 (툴바 바로 아래 우측) ── */
+.toolbar-wrap {
+  position: relative;
+}
+.fmt-toast {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 16px;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(25, 31, 40, 0.92);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  animation: fmt-toast-in 0.16s ease-out;
+}
+@keyframes fmt-toast-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}

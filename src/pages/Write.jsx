@@ -4,6 +4,7 @@ import { EditorContent, useEditor } from '@tiptap/react'
 import { NodeSelection, Selection } from '@tiptap/pm/state'
 import { buildExtensions, upgradeLegacyFigures } from '../editor/extensions.js'
 import Toolbar from '../editor/Toolbar.jsx'
+import { applyFormat, describeFormat, readFormat } from '../editor/formatPainter.js'
 import MathPopover from '../editor/MathPopover.jsx'
 import TableToolbar from '../editor/TableToolbar.jsx'
 import Modal from '../components/Modal.jsx'
@@ -113,6 +114,9 @@ function EditorPage({ initial, categories }) {
   const saveRef = useRef(null)
   const fileRef = useRef(null)
   const editorRef = useRef(null)
+  const copiedFormat = useRef(null) // Alt+C 모양 복사 버퍼
+  const [fmtToast, setFmtToast] = useState(null)
+  const fmtTimer = useRef(null)
   const dirty = useRef(false)
   const recoveryRef = useRef(null)
   // 저장/발행하지 않은 변경이 있는지: 본문 변경 여부 + 마지막 저장 시점의 제목·카테고리·태그와 비교
@@ -283,6 +287,13 @@ function EditorPage({ initial, categories }) {
         }
       }
       if (!e.altKey || mod) return
+      // Alt+C (macOS ⌥C — 입력 문자 'ç'와 무관하게 물리 키로 판별): 모양 복사 / 적용
+      if (e.code === 'KeyC' && !e.shiftKey && inEditor(e)) {
+        e.preventDefault()
+        e.stopPropagation()
+        formatPainter(ed)
+        return
+      }
       if (e.code === 'Digit3') {
         e.preventDefault()
         e.stopPropagation()
@@ -300,6 +311,26 @@ function EditorPage({ initial, categories }) {
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function showFmtToast(text) {
+    clearTimeout(fmtTimer.current)
+    setFmtToast({ text, id: Date.now() })
+    fmtTimer.current = setTimeout(() => setFmtToast(null), 1800)
+  }
+
+  // 한글(HWP) 방식 모양 복사: 커서만 → 복사, 드래그 선택 → 복사해 둔 서식 일괄 적용
+  function formatPainter(ed) {
+    const { selection } = ed.state
+    if (selection.empty || !copiedFormat.current) {
+      const f = readFormat(ed, { caret: selection.empty })
+      copiedFormat.current = f
+      showFmtToast(`서식 복사됨 (${describeFormat(f)})`)
+      return
+    }
+    if (selection instanceof NodeSelection && !selection.node.isInline) return
+    applyFormat(ed, copiedFormat.current)
+    showFmtToast(`서식 적용됨 (${describeFormat(copiedFormat.current)})`)
+  }
 
   function openMath() {
     const ed = editorRef.current
@@ -551,6 +582,11 @@ function EditorPage({ initial, categories }) {
         </div>
         <div className="toolbar-wrap">
           <Toolbar editor={editor} onMath={openMath} onLink={openLink} onImage={() => fileRef.current?.click()} />
+          {fmtToast && (
+            <div key={fmtToast.id} className="fmt-toast" role="status" aria-live="polite">
+              <Icon name="check" size={14} strokeWidth={2.6} /> {fmtToast.text}
+            </div>
+          )}
         </div>
       </div>
 
