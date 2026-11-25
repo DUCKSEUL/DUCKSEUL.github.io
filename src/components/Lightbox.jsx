@@ -11,6 +11,8 @@ import { Icon } from './ui.jsx'
 const MIN = 0.05
 const MAX = 8
 const STEP = 1.25
+const SLIDER_MIN = 25 // 줌 슬라이더 범위(%)
+const SLIDER_MAX = 400
 const PAD = 32 // 화면 맞춤 시 여백
 
 export default function Lightbox({ src, alt, onClose }) {
@@ -182,16 +184,36 @@ export default function Lightbox({ src, alt, onClose }) {
         <Icon name="close" size={26} />
       </button>
 
-      <div className="lb-bar" role="toolbar" aria-label="확대 도구">
-        <button type="button" onClick={() => zoomTo(scale / STEP)} aria-label="축소" title="축소 (−)">
+      <div
+        className="lb-bar"
+        role="toolbar"
+        aria-label="확대 도구"
+        // 슬라이더 드래그·버튼 조작이 배경 닫기·팬으로 번지지 않게
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button type="button" className="lb-step" onClick={() => zoomTo(scale / STEP)} aria-label="축소" title="축소 (−)">
           −
+        </button>
+        <input
+          type="range"
+          className="lb-slider"
+          min={SLIDER_MIN}
+          max={SLIDER_MAX}
+          step={1}
+          value={Math.min(SLIDER_MAX, Math.max(SLIDER_MIN, pct))}
+          onChange={(e) => zoomTo(Number(e.target.value) / 100)}
+          aria-label="확대 배율"
+          aria-valuetext={`${pct}%`}
+          title="드래그해서 확대·축소"
+          style={{ '--fill': `${((Math.min(SLIDER_MAX, Math.max(SLIDER_MIN, pct)) - SLIDER_MIN) / (SLIDER_MAX - SLIDER_MIN)) * 100}%` }}
+        />
+        <button type="button" className="lb-step" onClick={() => zoomTo(scale * STEP)} aria-label="확대" title="확대 (+)">
+          +
         </button>
         <span className="lb-pct" aria-live="polite">
           {pct}%
         </span>
-        <button type="button" onClick={() => zoomTo(scale * STEP)} aria-label="확대" title="확대 (+)">
-          +
-        </button>
         <span className="lb-sep" />
         <button type="button" className={mode === 'fit' ? 'is-on' : ''} onClick={() => setMode('fit')} title="화면 맞춤 (0)">
           화면 맞춤
