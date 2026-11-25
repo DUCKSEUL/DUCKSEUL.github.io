@@ -7,6 +7,7 @@ import HorizontalRule from '@tiptap/extension-horizontal-rule'
 import HardBreak from '@tiptap/extension-hard-break'
 import { TableKit, TableCell, TableHeader } from '@tiptap/extension-table'
 import Placeholder from '@tiptap/extension-placeholder'
+import { Plugin, PluginKey, NodeSelection, TextSelection } from '@tiptap/pm/state'
 import MathView from './MathView.jsx'
 
 /* ── 수식 (인라인 / 블록) ───────────────────── */
@@ -376,6 +377,61 @@ export const FONT_FAMILIES = [
 export const FONT_SIZES = ['10pt', '11pt', '12pt', '13pt', '14pt', '15pt', '16pt', '18pt', '20pt', '24pt', '28pt', '30pt', '36pt']
 export const DEFAULT_SIZE = '12pt'
 
+/**
+ * ↑/↓ 빈 줄 커서 보장
+ * 브라우저 기본 세로 이동은 빈 문단이나 사진(contenteditable=false)이 이어질 때 빈 줄을 건너뛰기도 해서,
+ * 현재 줄이 블록의 첫/마지막 줄이고 바로 위/아래 형제 블록이 '빈 줄'이면 커서를 그 안에 직접 둔다.
+ * (빈 줄이 아니면 브라우저 기본 동작 — 글자 위치를 맞춘 세로 이동 — 을 그대로 사용)
+ */
+function atVerticalEdge(view, dir) {
+  const sel = view.state.selection
+  if (sel.empty) return view.endOfTextblock(dir)
+  // 사진 등 인라인 노드가 선택된 상태: 그 노드가 문단의 첫/마지막 줄에 있는지 화면 좌표로 판단
+  if (!(sel instanceof NodeSelection) || !sel.node.isInline) return false
+  const para = view.domAtPos(sel.$from.start()).node
+  const box = (para.nodeType === 1 ? para : para.parentElement)?.getBoundingClientRect()
+  const r = view.nodeDOM(sel.from)?.getBoundingClientRect?.()
+  if (!box || !r) return false
+  return dir === 'up' ? r.top - box.top < 8 : box.bottom - r.bottom < 8
+}
+
+export const EmptyLineNav = Extension.create({
+  name: 'emptyLineNav',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey('emptyLineNav'),
+        props: {
+          handleKeyDown(view, e) {
+            if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return false
+            if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey || e.isComposing) return false
+            const dir = e.key === 'ArrowUp' ? 'up' : 'down'
+            const { state } = view
+            const { $from } = state.selection
+            const d = $from.depth
+            if (d < 1 || !$from.parent.isTextblock) return false
+            if (!atVerticalEdge(view, dir)) return false
+            let target = null
+            if (dir === 'down') {
+              const after = $from.after(d)
+              const next = state.doc.resolve(after).nodeAfter
+              if (next?.isTextblock && next.content.size === 0) target = after + 1
+            } else {
+              const before = $from.before(d)
+              const prev = state.doc.resolve(before).nodeBefore
+              if (prev?.isTextblock && prev.content.size === 0) target = before - 1
+            }
+            if (target == null) return false
+            e.preventDefault()
+            view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, target)).scrollIntoView())
+            return true
+          },
+        },
+      }),
+    ]
+  },
+})
+
 export function buildExtensions({ onEditMath }) {
   return [
     StarterKit.configure({
@@ -389,6 +445,7 @@ export function buildExtensions({ onEditMath }) {
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
     LineHeight,
     MarkedHardBreak,
+    EmptyLineNav,
     Divider,
     Figure,
     TableKit.configure({ table: { resizable: false }, tableCell: false, tableHeader: false }),
