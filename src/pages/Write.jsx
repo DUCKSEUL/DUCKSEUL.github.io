@@ -5,7 +5,6 @@ import { NodeSelection, Selection } from '@tiptap/pm/state'
 import { buildExtensions, upgradeLegacyFigures } from '../editor/extensions.js'
 import Toolbar from '../editor/Toolbar.jsx'
 import { applyFormat, describeFormat, readFormat } from '../editor/formatPainter.js'
-import MathPopover from '../editor/MathPopover.jsx'
 import TableToolbar from '../editor/TableToolbar.jsx'
 import Modal from '../components/Modal.jsx'
 import { Icon, toast, useDocumentTitle } from '../components/ui.jsx'
@@ -101,7 +100,6 @@ function EditorPage({ initial, categories }) {
   const [savedAt, setSavedAt] = useState(null)
   const [saving, setSaving] = useState(false)
   const [recovery, setRecovery] = useState(null)
-  const [mathState, setMathState] = useState(null)
   const [linkState, setLinkState] = useState(null)
   const [publishing, setPublishing] = useState(false)
   const [privateAt, setPrivateAt] = useState(null)
@@ -124,10 +122,7 @@ function EditorPage({ initial, categories }) {
   const baseRef = useRef({ title: initial?.title || '', category: initial?.category || '연구 노트', tags: (initial?.tags || []).join(', ') })
   recoveryRef.current = recovery
 
-  const onEditMath = useCallback(({ latex, display, pos, rect }) => {
-    setMathState({ latex, display, pos, anchor: { left: rect.left, top: rect.top, bottom: rect.bottom } })
-  }, [])
-  const extensions = useMemo(() => buildExtensions({ onEditMath: (s) => onEditMath(s) }), [onEditMath])
+  const extensions = useMemo(() => buildExtensions(), [])
 
   const insertImages = useCallback(async (files, pos) => {
     const ed = editorRef.current
@@ -256,7 +251,7 @@ function EditorPage({ initial, categories }) {
 
   // ── 단축키 ─────────────────────────────
   useEffect(() => {
-    const inEditor = (e) => !!e.target?.closest?.('.ProseMirror')
+    const inEditor = (e) => !!e.target?.closest?.('.ProseMirror') && !e.target.closest('.math-box') // 수식 상자 입력 중엔 에디터 단축키 제외
     const onKey = (e) => {
       const ed = editorRef.current
       if (!ed) return
@@ -332,53 +327,24 @@ function EditorPage({ initial, categories }) {
     showFmtToast(`서식 적용됨 (${describeFormat(copiedFormat.current)})`)
   }
 
+  // MS Word 방식: 커서 위치에 빈 수식 상자를 넣고 바로 선택 → 노드 뷰가 입력 상자로 열림
   function openMath() {
     const ed = editorRef.current
+    if (!ed) return
     const sel = ed.state.selection
-    if (sel instanceof NodeSelection && sel.node.type.name.startsWith('math')) {
-      const dom = ed.view.nodeDOM(sel.from)
-      const rect = (dom?.querySelector?.('.katex') || dom).getBoundingClientRect()
-      setMathState({ latex: sel.node.attrs.latex, display: sel.node.type.name === 'mathBlock', pos: sel.from, anchor: { left: rect.left, top: rect.top, bottom: rect.bottom } })
-      return
-    }
-    let c
-    try {
-      c = ed.view.coordsAtPos(sel.from)
-    } catch {
-      const r = ed.view.dom.getBoundingClientRect()
-      c = { left: r.left, top: r.top, bottom: r.top + 24 }
-    }
-    setMathState({ latex: '', display: false, pos: null, anchor: { left: c.left, top: c.top, bottom: c.bottom } })
+    if (sel instanceof NodeSelection && sel.node.type.name.startsWith('math')) return // 이미 편집 중
+    ed.storage.mathNav.enterSide = 'end'
+    ed.chain()
+      .focus()
+      .insertContent({ type: 'mathInline', attrs: { latex: '' } })
+      .command(({ tr }) => {
+        const pos = tr.selection.from - 1
+        const node = tr.doc.nodeAt(pos)
+        if (node?.type.name === 'mathInline') tr.setSelection(NodeSelection.create(tr.doc, pos))
+        return true
+      })
+      .run()
   }
-
-  const submitMath = ({ latex, display, pos }) => {
-    const ed = editorRef.current
-    const type = display ? 'mathBlock' : 'mathInline'
-    if (pos == null) {
-      ed.chain().focus().insertContent({ type, attrs: { latex } }).run()
-    } else {
-      const node = ed.state.doc.nodeAt(pos)
-      if (node && node.type.name === type) {
-        ed.chain()
-          .focus()
-          .command(({ tr }) => {
-            tr.setNodeMarkup(pos, undefined, { latex })
-            return true
-          })
-          .run()
-      } else if (node) {
-        ed.chain()
-          .focus()
-          .insertContentAt({ from: pos, to: pos + node.nodeSize }, { type, attrs: { latex } })
-          .run()
-      }
-    }
-    setMathState(null)
-  }
-  const closeMath = useCallback(() => {
-    setMathState(null)
-    editorRef.current?.commands.focus()
-  }, [])
 
   function openLink() {
     const ed = editorRef.current
@@ -673,7 +639,6 @@ function EditorPage({ initial, categories }) {
       />
 
       <TableToolbar editor={editor} />
-      <MathPopover state={mathState} onClose={closeMath} onSubmit={submitMath} />
 
       <Modal
         open={blocker.state === 'blocked'}

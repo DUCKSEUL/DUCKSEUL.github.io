@@ -19,9 +19,6 @@ function mathNode(name, inline) {
     atom: true,
     selectable: true,
     draggable: false,
-    addOptions() {
-      return { onEdit: null }
-    },
     addAttributes() {
       return {
         latex: {
@@ -50,6 +47,43 @@ function mathNode(name, inline) {
   })
 }
 export const MathInline = mathNode('mathInline', true)
+
+/**
+ * 수식 상자 진입 방향 기억 + 블록 수식 위아래 이동
+ * - ←로 들어가면 상자 커서는 끝, →로 들어가면 처음 (Word와 같은 감각)
+ * - 진입 자체는 ProseMirror 기본 동작(인접 atom 노드 선택)을 그대로 쓰고, 선택된 수식 노드가 편집 상자로 바뀜
+ */
+export const MathNav = Extension.create({
+  name: 'mathNav',
+  addStorage() {
+    return { enterSide: null }
+  },
+  addProseMirrorPlugins() {
+    const storage = this.storage
+    return [
+      new Plugin({
+        key: new PluginKey('mathNav'),
+        props: {
+          handleKeyDown(view, e) {
+            if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return false
+            const { selection } = view.state
+            if (!selection.empty) return false
+            const { $from } = selection
+            const isMath = (n) => n && n.type.name.startsWith('math')
+            if (e.key === 'ArrowLeft') {
+              if (isMath($from.nodeBefore)) storage.enterSide = 'end'
+              else if ($from.parentOffset === 0 && $from.depth >= 1 && isMath(view.state.doc.resolve($from.before()).nodeBefore)) storage.enterSide = 'end'
+            } else if (e.key === 'ArrowRight') {
+              if (isMath($from.nodeAfter)) storage.enterSide = 'start'
+              else if ($from.parentOffset === $from.parent.content.size && $from.depth >= 1 && isMath(view.state.doc.resolve($from.after()).nodeAfter)) storage.enterSide = 'start'
+            } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') storage.enterSide = 'end'
+            return false
+          },
+        },
+      }),
+    ]
+  },
+})
 export const MathBlock = mathNode('mathBlock', false)
 
 /* ── 사진 (인라인 블록 · 크기 조절) ─────────────
@@ -59,8 +93,17 @@ export const MathBlock = mathNode('mathBlock', false)
 const imgOf = (el) => (el.tagName === 'IMG' ? el : el.querySelector('img'))
 const HANDLES = ['tl', 'tr', 'bl', 'br']
 
+/**
+ * 빈 줄 정리: 공백(&nbsp;·' ')만 들어 있는 문단을 진짜 빈 문단으로 (붙여넣기·예전 글에서 생긴 자동 공백)
+ * → 가운데 정렬 빈 줄의 ↵ 기호·커서가 한 칸 치우치지 않음
+ */
+export function stripBlankLineSpaces(html = '') {
+  return html.replace(/<(p|h[2-4])(\s[^>]*)?>(?:\s|&nbsp;|&#160;)+<\/\1>/g, '<$1$2></$1>')
+}
+
 /** 예전 블록형 <figure>를 가운데 정렬 문단 안의 인라인 사진으로 변환 (에디터에 불러올 때) */
 export function upgradeLegacyFigures(html = '') {
+  html = stripBlankLineSpaces(html)
   if (!html.includes('<figure')) return html
   const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html')
   doc.body.querySelectorAll('figure[data-type="figure"]').forEach((fig) => {
@@ -432,7 +475,7 @@ export const EmptyLineNav = Extension.create({
   },
 })
 
-export function buildExtensions({ onEditMath }) {
+export function buildExtensions() {
   return [
     StarterKit.configure({
       heading: { levels: [2, 3, 4] },
@@ -452,7 +495,8 @@ export function buildExtensions({ onEditMath }) {
     Cell,
     Header,
     Placeholder.configure({ placeholder: '오늘의 연구를 기록해 보세요. 사진은 끌어다 놓거나 Ctrl+V로 붙여넣을 수 있어요.' }),
-    MathInline.configure({ onEdit: onEditMath }),
-    MathBlock.configure({ onEdit: onEditMath }),
+    MathInline,
+    MathBlock,
+    MathNav,
   ]
 }
