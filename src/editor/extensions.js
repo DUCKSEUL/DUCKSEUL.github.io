@@ -255,6 +255,56 @@ export const Figure = Node.create({
   },
 })
 
+/**
+ * 사진 2단계 삭제 (Word · Notion 방식)
+ * - 1단계: 사진 바로 오른쪽(또는 사진 다음 빈 줄 맨 앞)에서 Backspace, 사진 바로 왼쪽(또는 사진 앞 줄 끝)에서 Delete
+ *   → 지우지 않고 사진을 선택 상태로(파란 테두리 · 핸들 · 크기 배지)
+ * - 2단계: 선택된 상태에서 Backspace/Delete → 실제 삭제 (기본 동작, Ctrl+Z로 복구)
+ * - Esc → 선택만 풀고 커서를 사진 바로 오른쪽에 / 방향키·클릭은 기본 동작(선택 해제 + 커서 이동)
+ */
+const isImage = (n) => n?.type.name === 'image'
+export const ImageDeleteGuard = Extension.create({
+  name: 'imageDeleteGuard',
+  priority: 1000,
+  addKeyboardShortcuts() {
+    const select = (pos) => {
+      const { state, view } = this.editor
+      view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc, pos)).scrollIntoView())
+      return true
+    }
+    const guard = (dir) => () => {
+      const { selection, doc } = this.editor.state
+      if (!(selection instanceof TextSelection) || !selection.empty) return false
+      const { $from } = selection
+      if (!$from.parent.isTextblock) return false
+      if (dir < 0) {
+        if (isImage($from.nodeBefore)) return select($from.pos - $from.nodeBefore.nodeSize)
+        if ($from.parentOffset === 0 && $from.depth >= 1) {
+          const prev = doc.resolve($from.before()).nodeBefore
+          if (prev?.isTextblock && isImage(prev.lastChild)) return select($from.before() - 1 - prev.lastChild.nodeSize)
+        }
+      } else {
+        if (isImage($from.nodeAfter)) return select($from.pos)
+        if ($from.parentOffset === $from.parent.content.size && $from.depth >= 1) {
+          const next = doc.resolve($from.after()).nodeAfter
+          if (next?.isTextblock && isImage(next.firstChild)) return select($from.after() + 1)
+        }
+      }
+      return false
+    }
+    return {
+      Backspace: guard(-1),
+      Delete: guard(1),
+      Escape: () => {
+        const { selection, tr } = this.editor.state
+        if (!(selection instanceof NodeSelection) || !isImage(selection.node)) return false
+        this.editor.view.dispatch(tr.setSelection(TextSelection.create(tr.doc, selection.to)))
+        return true
+      },
+    }
+  },
+})
+
 /* ── 강제 줄바꿈(Shift+Enter): 에디터 화면에만 ↵ 표시 ──
  * 노드 뷰는 편집 화면에만 쓰이고, 저장 HTML(getHTML)은 renderHTML의 <br> 그대로라
  * 상세 보기·네이버 복사에는 기호가 들어가지 않습니다. */
@@ -530,6 +580,7 @@ export function buildExtensions() {
     EmptyLineNav,
     Divider,
     Figure,
+    ImageDeleteGuard,
     TableKit.configure({ table: { resizable: false }, tableCell: false, tableHeader: false }),
     Cell,
     Header,
