@@ -1,11 +1,9 @@
-// 붙여넣기(Ctrl+V)/드래그한 이미지를 자동 리사이징·압축해 data URL로 변환합니다.
-//  - 가로 최대 1400px (비율 유지, 확대는 하지 않음)
-//  - JPEG 품질 0.85. 단, 작은 PNG 캡처는 글자가 선명하도록 PNG를 유지
+// 붙여넣기(Ctrl+V)/드래그한 이미지를 data URL로 변환합니다.
+//  - 원본 해상도·화질 그대로 (강제 리사이즈·JPEG 재압축 없음)
+//  - 에디터에서 ½·⅓로 줄여도 표시 너비만 바뀌고 원본 데이터는 고해상도 그대로
 import DOMPurify from 'dompurify'
 
-export const MAX_W = 1400
-export const QUALITY = 0.85
-const KEEP_PNG_BYTES = 400_000 // 이보다 작게 나오는 PNG는 그대로 PNG
+const SVG_MAX_W = 4096 // SVG 래스터화 최대 가로(2배 선명도)
 
 export const isSvgFile = (f) => f?.type === 'image/svg+xml' || /\.svgz?$/i.test(f?.name || '')
 export const isSvgSrc = (src = '') => /^data:image\/svg\+xml/i.test(src) || /^[^?#]+\.svgz?([?#]|$)/i.test(src)
@@ -43,8 +41,8 @@ export async function svgToPng(svgText) {
     await img.decode()
     const nw = img.naturalWidth || 800
     const nh = img.naturalHeight || 600
-    // 선명도를 위해 2배로 그리되 가로 최대 MAX_W
-    const scale = Math.min(2, MAX_W / nw) || 1
+    // 선명도를 위해 2배로 그리되 가로 최대 SVG_MAX_W
+    const scale = Math.min(2, SVG_MAX_W / nw) || 1
     const w = Math.max(1, Math.round(nw * scale))
     const h = Math.max(1, Math.round(nh * scale))
     const canvas = document.createElement('canvas')
@@ -73,28 +71,28 @@ export async function svgSrcToPng(src) {
   return svgToPng(text)
 }
 
+// 파일 → data URL: 원본 바이트 그대로 (리사이즈·재압축 없음 → 해상도·화질 100% 유지)
+const readAsDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(r.result)
+    r.onerror = () => reject(r.error)
+    r.readAsDataURL(file)
+  })
+const KEEP_TYPES = /^image\/(png|jpeg|gif|webp)$/i
+
 export async function fileToDataUrl(file) {
   if (isSvgFile(file)) return svgToPng(await file.text())
+  // PNG(화면 캡처) · JPEG · GIF · WebP: 원본 파일 그대로 (naturalWidth × naturalHeight 유지, 무손실)
+  if (KEEP_TYPES.test(file.type)) return readAsDataUrl(file)
+  // 그 밖의 형식(BMP·AVIF 등): 원본 크기 그대로 무손실 PNG로만 변환 (축소 없음)
   const bitmap = await createImageBitmap(file)
-  const scale = Math.min(1, MAX_W / bitmap.width)
-  const w = Math.max(1, Math.round(bitmap.width * scale))
-  const h = Math.max(1, Math.round(bitmap.height * scale))
   const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext('2d')
-  ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(bitmap, 0, 0, w, h)
+  canvas.width = bitmap.width
+  canvas.height = bitmap.height
+  canvas.getContext('2d').drawImage(bitmap, 0, 0)
   bitmap.close?.()
-  if (file.type === 'image/png' || file.type === 'image/gif' || file.type === 'image/webp') {
-    const png = canvas.toDataURL('image/png')
-    if (png.length * 0.75 < KEEP_PNG_BYTES) return png
-  }
-  // 투명 배경은 흰색으로 채운 뒤 JPEG(0.85)로 압축
-  ctx.globalCompositeOperation = 'destination-over'
-  ctx.fillStyle = '#fff'
-  ctx.fillRect(0, 0, w, h)
-  return canvas.toDataURL('image/jpeg', QUALITY)
+  return canvas.toDataURL('image/png')
 }
 
 export function imageFiles(dataTransfer) {

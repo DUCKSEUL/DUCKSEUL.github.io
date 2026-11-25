@@ -1930,51 +1930,164 @@ kbd {
   position: fixed;
   inset: 0;
   z-index: 120;
+  background: rgba(10, 12, 16, 0.92);
+  animation: fadeIn 0.18s;
+  overscroll-behavior: contain;
+}
+.lb-stage {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  cursor: zoom-out;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+  touch-action: pan-x pan-y;
+}
+.lb-canvas {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  padding: 24px;
-  background: rgba(0, 0, 0, 0.88);
-  cursor: zoom-out;
-  animation: fadeIn 0.18s;
+  min-width: 100%;
+  min-height: 100%;
+  width: max-content;
+  padding: 32px 32px 88px;
+  box-sizing: border-box;
 }
+/* 원본 픽셀 기준 width/height로 그림: max-width 제한 없음, 다크 모드 필터·투명도 무시 */
 .lightbox img {
-  max-width: min(1400px, 94vw);
-  max-height: 86vh;
-  object-fit: contain;
-  border-radius: 6px;
+  display: block;
+  flex: none;
+  max-width: none !important;
+  max-height: none !important;
+  filter: none !important;
+  opacity: 1 !important;
+  mix-blend-mode: normal !important;
   background: #fff;
-  cursor: default;
+  border-radius: 4px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+  cursor: zoom-in;
+  user-select: none;
+  image-rendering: auto;
   animation: zoomIn 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.lightbox img.is-one {
+  cursor: zoom-out;
+}
+.lb-stage.is-big img {
+  cursor: grab;
+}
+.lb-stage.is-big img.is-one {
+  cursor: zoom-out;
+}
+/* 300% 이상: 픽셀 경계를 그대로 보여 작은 눈금·글자 확인 */
+.lightbox img.is-pixel {
+  image-rendering: pixelated;
 }
 @keyframes zoomIn {
   from {
     opacity: 0;
-    transform: scale(0.94);
+    transform: scale(0.96);
   }
 }
+.lb-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(24, 26, 32, 0.86);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 8px 24px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.lb-bar button {
+  min-width: 36px;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.lb-bar button:first-child,
+.lb-bar button:nth-child(3) {
+  padding: 0;
+  font-size: 1.15rem;
+}
+.lb-bar button:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+.lb-bar button.is-on {
+  background: #fff;
+  color: #111;
+}
+.lb-pct {
+  min-width: 52px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.lb-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: rgba(255, 255, 255, 0.2);
+}
+.lb-size {
+  padding: 0 10px 0 6px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
 .lightbox-caption {
-  color: rgba(255, 255, 255, 0.8);
+  position: absolute;
+  left: 50%;
+  bottom: 70px;
+  transform: translateX(-50%);
+  max-width: 90vw;
+  margin: 0;
+  padding: 4px 12px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  color: rgba(255, 255, 255, 0.85);
   font-size: 0.9rem;
 }
 .lightbox-close {
   position: absolute;
   top: 16px;
   right: 16px;
+  z-index: 1;
   display: grid;
   place-items: center;
   width: 44px;
   height: 44px;
   border: 0;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(24, 26, 32, 0.86);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14), 0 6px 18px rgba(0, 0, 0, 0.35);
   color: #fff;
   cursor: pointer;
 }
 .lightbox-close:hover {
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(48, 52, 62, 0.95);
+}
+@media (max-width: 560px) {
+  .lb-size,
+  .lb-sep {
+    display: none;
+  }
+  .lb-bar button {
+    padding: 0 9px;
+  }
 }
 .toast-host {
   position: fixed;
