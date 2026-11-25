@@ -8,21 +8,6 @@ import { NodeSelection, TextSelection } from '@tiptap/pm/state'
 import katex from 'katex'
 import { renderLatex } from '../lib/math.js'
 
-const SNIPPETS = [
-  ['분수', '\\frac{a}{b}'],
-  ['위 첨자', 'x^{2}'],
-  ['아래 첨자', 'x_{i}'],
-  ['제곱근', '\\sqrt{x}'],
-  ['적분', '\\int_{a}^{b}'],
-  ['면적분', '\\iint_S'],
-  ['합', '\\sum_{n=1}^{N}'],
-  ['회전', '\\nabla \\times'],
-  ['굵은 벡터', '\\mathbf{E}'],
-  ['로만체', '\\mathrm{E}'],
-  ['행렬', '\\begin{bmatrix} a & b \\\\ c & d \\end{bmatrix}'],
-  ['그리스 문자', '\\alpha \\beta \\omega'],
-]
-
 export const MATH_PLACEHOLDER = '여기에 수식을 입력하세요.'
 
 function parseError(latex, display) {
@@ -41,7 +26,6 @@ export default function MathView({ node, editor, getPos, selected }) {
   const html = useMemo(() => (latex ? renderLatex(latex, display) : ''), [latex, display])
 
   const [value, setValue] = useState(latex)
-  const [menu, setMenu] = useState(false)
   const [error, setError] = useState(null)
   const inputRef = useRef(null)
   const done = useRef(false) // 한 번의 편집에서 확정이 두 번(Enter 후 blur) 일어나지 않게
@@ -52,7 +36,6 @@ export default function MathView({ node, editor, getPos, selected }) {
     done.current = false
     setValue(latex)
     setError(null)
-    setMenu(false)
     const side = editor.storage.mathNav?.enterSide
     if (editor.storage.mathNav) editor.storage.mathNav.enterSide = null
     requestAnimationFrame(() => {
@@ -136,19 +119,6 @@ export default function MathView({ node, editor, getPos, selected }) {
     }
   }
 
-  const insertSnippet = (s) => {
-    const el = inputRef.current
-    const a = el.selectionStart
-    const b = el.selectionEnd
-    const v = el.value.slice(0, a) + s + el.value.slice(b)
-    setValue(v)
-    setMenu(false)
-    requestAnimationFrame(() => {
-      el.focus()
-      el.setSelectionRange(a + s.length, a + s.length)
-    })
-  }
-
   // 인라인 ↔ 블록 전환: 노드를 바꾼 뒤 새 노드를 다시 선택해 편집 상자 유지
   const toggleDisplay = () => {
     const pos = getPos()
@@ -156,7 +126,6 @@ export default function MathView({ node, editor, getPos, selected }) {
     const text = (inputRef.current?.value ?? value).trim()
     const typeName = display ? 'mathInline' : 'mathBlock'
     done.current = true
-    setMenu(false)
     if (editor.storage.mathNav) editor.storage.mathNav.enterSide = 'end'
     editor.chain().insertContentAt({ from: pos, to: pos + node.nodeSize }, { type: typeName, attrs: { latex: text } }).run()
     const { state, view } = editor
@@ -171,15 +140,13 @@ export default function MathView({ node, editor, getPos, selected }) {
     if (at != null) view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc, at)))
   }
 
-  // 메뉴 바깥 클릭 시 닫기
+  // Alt+3을 상자 안에서 다시 누르면 인라인 ↔ 블록 전환 (Write의 단축키 처리기가 이벤트로 알려 줌)
   useEffect(() => {
-    if (!menu) return
-    const off = (e) => !e.target.closest?.('.math-box-menu, .math-box-drop') && setMenu(false)
-    document.addEventListener('mousedown', off, true)
-    return () => document.removeEventListener('mousedown', off, true)
-  }, [menu])
-
-  const keep = (e) => e.preventDefault() // 버튼 눌러도 입력 상자 포커스 유지
+    if (!editing) return
+    const on = () => toggleDisplay()
+    window.addEventListener('math-toggle-display', on)
+    return () => window.removeEventListener('math-toggle-display', on)
+  })
 
   return (
     <NodeViewWrapper
@@ -189,12 +156,17 @@ export default function MathView({ node, editor, getPos, selected }) {
       title={editing ? undefined : '클릭하거나 ←/→ 키로 들어가 수식 수정'}
     >
       {editing ? (
-        <span className={`math-box ${error ? 'has-error' : ''}`} onMouseDown={(e) => e.target === inputRef.current || keep(e)}>
-          <span className="math-box-handle" aria-hidden title="수식">
-            <svg width="8" height="14" viewBox="0 0 8 14">
-              {[2, 7, 12].map((y) => [2, 6].map((x) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.1" fill="currentColor" />))}
-            </svg>
-          </span>
+        <span
+          className={`math-box ${error ? 'has-error' : ''}`}
+          title="Enter 확정 · Esc 닫기 · Alt+3 인라인/블록 전환"
+          onMouseDown={(e) => {
+            if (e.target === inputRef.current) return
+            e.preventDefault() // 상자 여백·배지를 눌러도 입력 포커스 유지 (커서는 끝으로)
+            const el = inputRef.current
+            el?.focus()
+            el?.setSelectionRange(el.value.length, el.value.length)
+          }}
+        >
           <input
             ref={inputRef}
             className="math-box-input"
@@ -212,31 +184,15 @@ export default function MathView({ node, editor, getPos, selected }) {
             placeholder={MATH_PLACEHOLDER}
             spellCheck={false}
             autoComplete="off"
-            aria-label="LaTeX 수식 입력"
-            style={{ width: `${Math.max(value.length, value ? 1 : MATH_PLACEHOLDER.length * 1.55) + 1.5}ch` }}
+            aria-label="LaTeX 수식 입력 (Enter 확정)"
+            style={{ width: `${value ? Math.max(2, value.length + 1) : MATH_PLACEHOLDER.length * 1.95}ch` }}
           />
-          <button type="button" className="math-box-drop" onMouseDown={keep} onClick={() => setMenu((m) => !m)} aria-label="수식 옵션" aria-expanded={menu}>
-            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
-              <path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
+          <span className="math-box-hint" aria-hidden>
+            Enter ↵
+          </span>
           {error && (
             <span className="math-box-error" role="alert">
               {error}
-            </span>
-          )}
-          {menu && (
-            <span className="math-box-menu" role="menu" onMouseDown={keep}>
-              <button type="button" role="menuitem" onClick={toggleDisplay}>
-                {display ? '인라인 수식으로 바꾸기' : '블록(가운데 한 줄) 수식으로 바꾸기'}
-              </button>
-              <span className="math-box-sep" />
-              {SNIPPETS.map(([label, s]) => (
-                <button type="button" role="menuitem" key={s} onClick={() => insertSnippet(s)}>
-                  <span>{label}</span>
-                  <code>{s}</code>
-                </button>
-              ))}
             </span>
           )}
         </span>

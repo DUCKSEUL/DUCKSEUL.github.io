@@ -1145,15 +1145,26 @@ li.paper,
   padding-left: 0;
 }
 
-/* ═══ v11: MS Word 방식 인라인 수식 상자 (편집 화면 전용) ═══ */
+/* ═══ v12: 인라인 수식 입력 상자 — 화이트/블루 미니멀 (편집 화면 전용) ═══ */
+:root {
+  --math-caret: #2563eb;
+  --math-border: #3b82f6;
+  --math-bg: #eff6ff;
+  --math-ink: #1e3a8a;
+  --math-hint: #93a4bf;
+}
+:root[data-theme='dark'] {
+  --math-caret: #60a5fa;
+  --math-border: #60a5fa;
+  --math-bg: #1e293b;
+  --math-ink: #dbeafe;
+  --math-hint: #64748b;
+}
 .editor-content .math-node.is-editing {
   background: transparent;
   outline: none;
   cursor: text;
   padding: 0;
-}
-.editor-content .math-node.is-inline.is-editing {
-  vertical-align: baseline;
 }
 .editor-content .math-node.is-block.is-editing {
   padding: 6px 0;
@@ -1161,122 +1172,87 @@ li.paper,
 .math-box {
   position: relative;
   display: inline-flex;
-  align-items: stretch;
+  align-items: center;
+  gap: 6px;
   max-width: 100%;
-  border: 1px solid #a7b4c8;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--blue) 4%, var(--surface));
-  line-height: 1.6;
+  padding: 1px 6px 1px 8px;
+  border: 1.5px solid var(--math-border);
+  border-radius: 8px;
+  background: var(--math-bg);
+  line-height: 1.5;
   vertical-align: baseline;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--blue) 10%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--math-border) 14%, transparent);
+  cursor: text;
 }
 .math-box.has-error {
-  border-color: #f04452;
-  box-shadow: 0 0 0 2px rgba(240, 68, 82, 0.12);
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.14);
 }
-.math-box-handle {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 3px;
-  color: #8b95a1;
-  background: color-mix(in srgb, var(--g500) 12%, transparent);
-  border-right: 1px solid #c9d2de;
-  cursor: default;
+/* ProseMirror는 노드 선택 중 에디터 전체에 caret-color: transparent를 걸어 둠 → 입력 상자만 다시 보이게 */
+.ProseMirror .math-box-input,
+.ProseMirror-hideselection .math-box-input {
+  caret-color: var(--math-caret) !important;
 }
 .math-box-input {
   min-width: 2ch;
   max-width: min(640px, 70vw);
-  padding: 0 6px;
+  padding: 0;
   border: 0;
   outline: none;
   background: transparent;
-  color: var(--g900);
-  font: 500 0.92em/1.6 'Cambria Math', 'Latin Modern Math', 'STIX Two Math', Consolas, monospace;
+  color: var(--math-ink);
+  font: 500 0.86em/1.5 'JetBrains Mono', 'D2Coding', Consolas, 'SFMono-Regular', Menlo, monospace;
+  letter-spacing: 0;
+}
+.math-box-input::selection {
+  background: color-mix(in srgb, var(--math-border) 30%, transparent) !important;
 }
 .math-box-input::placeholder {
-  color: #8b95a1;
+  color: var(--math-hint);
   font-family: inherit;
-  font-style: italic;
+  font-weight: 400;
 }
-.math-box-drop {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 4px;
-  border: 0;
-  border-left: 1px solid #c9d2de;
-  background: transparent;
-  color: #6b7684;
-  cursor: pointer;
-}
-.math-box-drop:hover,
-.math-box-drop[aria-expanded='true'] {
-  background: color-mix(in srgb, var(--blue) 12%, transparent);
-  color: var(--blue);
+.math-box-hint {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--math-border) 12%, transparent);
+  color: var(--math-hint);
+  font-family: inherit;
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  user-select: none;
+  white-space: nowrap;
 }
 .math-box-error {
   position: absolute;
   left: 0;
-  top: calc(100% + 4px);
+  top: calc(100% + 6px);
   z-index: 40;
   max-width: min(420px, 80vw);
   padding: 4px 8px;
   border-radius: 6px;
-  background: #f04452;
+  background: #ef4444;
   color: #fff;
   font-size: 0.74rem;
   font-weight: 600;
   line-height: 1.4;
   white-space: normal;
 }
-.math-box-menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  z-index: 45;
-  display: flex;
-  flex-direction: column;
-  min-width: 240px;
-  max-height: 300px;
-  overflow-y: auto;
-  padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
-  box-shadow: var(--shadow-lg);
-  text-align: left;
-  line-height: 1.4;
-}
-.math-box-menu button {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--g800);
-  font-size: 0.8rem;
-  text-align: left;
-  cursor: pointer;
-}
-.math-box-menu button:hover {
-  background: var(--surface-2);
-}
-.math-box-menu code {
-  color: var(--g500);
-  font-size: 0.72rem;
-}
-.math-box-sep {
-  height: 1px;
-  margin: 4px 2px;
-  background: var(--line);
-}
-/* 확정된 수식: 편집 테두리 없이 KaTeX만 — 마우스를 올리면 클릭 가능하다는 표시만 살짝 */
+/* 확정된 수식: 테두리 없이 KaTeX만 — 마우스를 올리면 수정 가능하다는 표시만 은은하게 */
 .editor-content .math-node:not(.is-editing):hover {
-  background: color-mix(in srgb, var(--blue) 6%, transparent);
+  background: color-mix(in srgb, var(--math-border) 8%, transparent);
 }
 
 /* 구분선 앞뒤 등 빈 줄: 가운데 정렬이면 ↵ 기호를 정확히 줄 가운데에 */
 .editor-content :is(p, h2, h3, h4)[style*='text-align: center']:has(> br.ProseMirror-trailingBreak:only-child)::after {
   padding-left: 0;
+}
+
+/* 수식(인라인 atom)으로 끝나는 문단: ProseMirror가 붙이는 <img separator><br trailingBreak> 중 <br> 때문에
+ * ↵ 기호가 다음 줄로 밀려 '가짜 빈 줄'이 생기던 문제 → <br>은 숨기고(커서 자리는 separator가 담당) 한 줄로 유지 */
+.editor-content :is(p, h2, h3, h4) > img.ProseMirror-separator + br.ProseMirror-trailingBreak:last-child {
+  display: none;
 }

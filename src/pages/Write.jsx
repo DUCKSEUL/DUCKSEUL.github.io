@@ -332,7 +332,10 @@ function EditorPage({ initial, categories }) {
     const ed = editorRef.current
     if (!ed) return
     const sel = ed.state.selection
-    if (sel instanceof NodeSelection && sel.node.type.name.startsWith('math')) return // 이미 편집 중
+    if (sel instanceof NodeSelection && sel.node.type.name.startsWith('math')) {
+      window.dispatchEvent(new Event('math-toggle-display')) // 편집 중 Alt+3 → 인라인/블록 전환
+      return
+    }
     ed.storage.mathNav.enterSide = 'end'
     ed.chain()
       .focus()
