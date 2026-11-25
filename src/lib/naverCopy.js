@@ -194,7 +194,8 @@ export async function buildNaverHtml(container) {
   const HR = {
     line: 'border:0;border-top:1px solid #d1d6db;margin:28px 0',
     bold: 'border:0;border-top:3px solid #333d4b;margin:28px 0',
-    dotted: 'border:0;border-top:2px dotted #b0b8c1;margin:28px 0',
+    dotted: 'border:0;border-top:3px dotted #b0b8c1;margin:28px 0',
+    dashed: 'border:0;border-top:2px dashed #8b95a1;margin:28px 0',
     short: 'border:0;border-top:2px solid #333d4b;width:60px;margin:32px auto',
     double: 'border:0;border-top:4px double #8b95a1;margin:28px 0',
   }

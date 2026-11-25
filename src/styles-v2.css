@@ -17,7 +17,11 @@
 }
 .prose hr[data-style='dotted'],
 .dv-prev hr[data-style='dotted'] {
-  border-top: 2px dotted var(--g400);
+  border-top: 3px dotted var(--g400);
+}
+.prose hr[data-style='dashed'],
+.dv-prev hr[data-style='dashed'] {
+  border-top: 2px dashed var(--g500);
 }
 .prose hr[data-style='short'],
 .dv-prev hr[data-style='short'] {

@@ -8,6 +8,7 @@ import HardBreak from '@tiptap/extension-hard-break'
 import { TableKit, TableCell, TableHeader } from '@tiptap/extension-table'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Plugin, PluginKey, NodeSelection, TextSelection } from '@tiptap/pm/state'
+import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import MathView from './MathView.jsx'
 
 /* ── 수식 (인라인 / 블록) ───────────────────── */
@@ -311,10 +312,13 @@ export const DIVIDERS = [
   { value: 'line', label: '기본 실선' },
   { value: 'bold', label: '굵은 실선' },
   { value: 'dotted', label: '점선' },
-  { value: 'short', label: '짧은 중앙선' },
+  { value: 'dashed', label: '파선' },
   { value: 'double', label: '이중선' },
+  { value: 'short', label: '짧은 중앙선' },
   { value: 'dots', label: '3점 장식선' },
 ]
+
+export const DIVIDER_HINT = '더블 클릭하여 구분선 스타일 변경'
 export const Divider = HorizontalRule.extend({
   // 코어 키맵의 Mod-Enter(exitCode)보다 먼저 처리
   priority: 1000,
@@ -327,6 +331,41 @@ export const Divider = HorizontalRule.extend({
         return insertDividerKeepAlign(ed, 'line')
       },
     }
+  },
+  addProseMirrorPlugins() {
+    const editor = this.editor
+    return [
+      new Plugin({
+        key: new PluginKey('dividerPicker'),
+        props: {
+          // 편집 화면 전용: 마우스를 올리면 하이라이트 + 안내 툴팁 (저장 HTML에는 남지 않음)
+          decorations(state) {
+            const decos = []
+            state.doc.descendants((node, pos) => {
+              if (node.type.name === 'horizontalRule') decos.push(Decoration.node(pos, pos + node.nodeSize, { class: 'hr-pickable', title: DIVIDER_HINT }))
+            })
+            return DecorationSet.create(state.doc, decos)
+          },
+          handleDOMEvents: {
+            dblclick(view, e) {
+              const hr = e.target?.closest?.('hr')
+              if (!hr || !view.dom.contains(hr) || !view.editable) return false
+              let pos
+              try {
+                pos = view.posAtDOM(hr, 0)
+              } catch {
+                return false
+              }
+              if (view.state.doc.nodeAt(pos)?.type.name !== 'horizontalRule') return false
+              e.preventDefault()
+              view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)))
+              editor.emit('dividerDblClick', pos) // Write 화면의 DividerPopover가 받아서 팝오버를 엶
+              return true
+            },
+          },
+        },
+      }),
+    ]
   },
   addAttributes() {
     return {

@@ -6,6 +6,7 @@ import { buildExtensions, upgradeLegacyFigures } from '../editor/extensions.js'
 import Toolbar from '../editor/Toolbar.jsx'
 import { applyFormat, describeFormat, readFormat } from '../editor/formatPainter.js'
 import TableToolbar from '../editor/TableToolbar.jsx'
+import DividerPopover from '../editor/DividerPopover.jsx'
 import Modal from '../components/Modal.jsx'
 import { Icon, toast, useDocumentTitle } from '../components/ui.jsx'
 import { usePosts, savePost, newId, markSynced, savePrivatePost, removePrivatePost, isPubliclyListed } from '../lib/store.js'
@@ -642,6 +643,7 @@ function EditorPage({ initial, categories }) {
       />
 
       <TableToolbar editor={editor} />
+      <DividerPopover editor={editor} />
 
       <Modal
         open={blocker.state === 'blocked'}
