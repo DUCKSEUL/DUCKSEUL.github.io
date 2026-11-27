@@ -248,14 +248,38 @@ export default function Toolbar({ editor, onMath, onLink, onImage }) {
               </option>
             ))}
           </select>
-          <Btn label="글씨 크기 줄이기" className="tb-step" onClick={() => stepFontSize(editor, -1)} disabled={parseFloat(size || DEFAULT_SIZE) <= 10}>
-            <span aria-hidden>가</span>
-            <small aria-hidden>−</small>
-          </Btn>
-          <Btn label="글씨 크기 키우기" className="tb-step" onClick={() => stepFontSize(editor, 1)} disabled={parseFloat(size || DEFAULT_SIZE) >= 36}>
-            <span aria-hidden className="big">가</span>
-            <small aria-hidden>+</small>
-          </Btn>
+          {/* 글자 크기 줄이기 · 키우기: 드롭다운과 같은 높이·테두리의 일체형 세그먼트 버튼 */}
+          <div className="tb-seg" role="group" aria-label="글자 크기 단계 조절">
+            <button
+              type="button"
+              className="tb-seg-btn"
+              onMouseDown={keep}
+              onClick={() => stepFontSize(editor, -1)}
+              disabled={parseFloat(size || DEFAULT_SIZE) <= 10}
+              title="글자 크기 줄이기"
+              aria-label="글자 크기 줄이기"
+            >
+              <svg width="20" height="16" viewBox="0 0 20 16" aria-hidden>
+                <path d="M2 14 6 3.5 10 14M3.5 10.5h5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M13 8h5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+              </svg>
+            </button>
+            <span className="tb-seg-sep" aria-hidden />
+            <button
+              type="button"
+              className="tb-seg-btn"
+              onMouseDown={keep}
+              onClick={() => stepFontSize(editor, 1)}
+              disabled={parseFloat(size || DEFAULT_SIZE) >= 36}
+              title="글자 크기 키우기"
+              aria-label="글자 크기 키우기"
+            >
+              <svg width="20" height="16" viewBox="0 0 20 16" aria-hidden>
+                <path d="M1.5 15 6 2.5 10.5 15M3.2 11h5.6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M13 8h5M15.5 5.5v5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 

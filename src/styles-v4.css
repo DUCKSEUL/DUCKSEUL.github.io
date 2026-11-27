@@ -2333,3 +2333,52 @@ body.is-img-dragging * {
     animation: none;
   }
 }
+
+/* ═══ v28: 툴바 글자 크기 줄이기·키우기 — 드롭다운과 같은 높이·테두리의 세그먼트 버튼 ═══ */
+.tb-size {
+  gap: 6px;
+}
+.tb-seg {
+  display: inline-flex;
+  align-items: stretch;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.tb-seg-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--g700);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, transform 0.06s;
+}
+.tb-seg-btn:hover:not(:disabled) {
+  background: var(--fill);
+  color: var(--g900);
+}
+.tb-seg-btn:active:not(:disabled) {
+  background: color-mix(in srgb, var(--fill) 70%, var(--line));
+}
+.tb-seg-btn:active:not(:disabled) svg {
+  transform: scale(0.92);
+}
+.tb-seg-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.tb-seg-btn:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
+.tb-seg-sep {
+  width: 1px;
+  margin: 6px 0;
+  background: var(--line);
+}

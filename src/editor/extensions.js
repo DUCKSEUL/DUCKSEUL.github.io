@@ -14,6 +14,7 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import MathView from './MathView.jsx'
 import { DOLLAR_PASTE_RE, acceptDollarMath } from './mathTools.js'
 import { ImageDragSelect } from './imageDrag.js'
+import { CodeIndent } from './codeIndent.js'
 
 /* ── 수식 (인라인 / 블록) ───────────────────── */
 function mathNode(name, inline) {
@@ -797,6 +798,7 @@ export function buildExtensions() {
     ImageDeleteGuard,
     ImageSelectionVisuals,
     ImageDragSelect,
+    CodeIndent,
     TableKit.configure({ table: { resizable: false }, tableCell: false, tableHeader: false }),
     Cell,
     Header,
