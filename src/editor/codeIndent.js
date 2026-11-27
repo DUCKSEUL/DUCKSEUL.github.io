@@ -1,6 +1,7 @@
 // 코드 블록 편집 편의 (VS Code 감각)
 // - Tab: 현재 줄(여러 줄을 선택했으면 선택한 모든 줄) 맨 앞에 공백 4칸 — 포커스가 다른 UI로 빠져나가지 않음, 커서 위치 유지
 // - Shift+Tab: 줄 맨 앞의 공백 최대 4칸(또는 탭 1개) 제거
+// - Backspace: 들여쓰기 공백 안에서는 4칸 단위로 한 번에 내어쓰기 (스마트 백스페이스)
 // - Enter: 이전 줄의 들여쓰기를 이어받고, ':'로 끝나는 줄(def …:, class …:, if …:)이면 4칸 더
 //   빈 줄(공백만 있는 줄)이 두 번 이어진 끝에서 Enter → 블록 밖으로 (기존 '엔터 세 번' 동작 유지)
 import { Extension } from '@tiptap/core'
@@ -44,6 +45,20 @@ export const CodeIndent = Extension.create({
       return true // 들여쓸 것이 없어도 Tab이 포커스를 옮기지 않게
     }
     return {
+      // 스마트 백스페이스: 줄 시작~커서가 공백뿐이면 직전 탭 스톱(4칸 단위)까지 한 번에 (8→4, 6→4, 4→0, 3→0)
+      // 커서 앞에 글자가 있거나 줄 맨 앞이면 기본 동작(한 글자 삭제 · 윗줄과 합치기)
+      Backspace: () => {
+        const { state, view } = this.editor
+        const c = codeContext(state)
+        if (!c || c.from !== c.to) return false
+        const ls = c.text.lastIndexOf('\n', c.from - 1) + 1
+        const before = c.text.slice(ls, c.from)
+        if (!before.length || !/^ +$/.test(before)) return false
+        const target = Math.ceil(before.length / INDENT.length) * INDENT.length - INDENT.length
+        const cut = before.length - Math.max(0, target)
+        view.dispatch(state.tr.delete(c.start + c.from - cut, c.start + c.from).scrollIntoView())
+        return true
+      },
       Tab: indent(1),
       'Shift-Tab': indent(-1),
       Enter: () => {
