@@ -1,6 +1,7 @@
 import { Extension, Node, mergeAttributes } from '@tiptap/core'
 import { ReactNodeViewRenderer } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import { BulletList, OrderedList } from '@tiptap/extension-list'
 import { TextStyleKit } from '@tiptap/extension-text-style'
 import TextAlign from '@tiptap/extension-text-align'
 import HorizontalRule from '@tiptap/extension-horizontal-rule'
@@ -556,6 +557,19 @@ export const EmptyLineNav = Extension.create({
   },
 })
 
+/* ── 목록: 새로 만드는 기능은 모두 끔 ─────────────
+ * '1. ' · '- ' · '* ' 입력 자동 변환(Input Rule), 번호 붙은 일반 텍스트 붙여넣기 → 목록 변환, Ctrl+Shift+7/8 단축키 없음
+ * → '1. Nonlocal synthesis …'처럼 쳐도 일반 문단 그대로.
+ * 이미 목록이 들어 있는 예전 글이 깨지지 않도록 목록 구조를 읽고 보여주는 것만 남김 */
+const noListCreation = {
+  addInputRules: () => [],
+  addPasteRules: () => [],
+  addKeyboardShortcuts: () => ({}),
+  addProseMirrorPlugins: () => [],
+}
+const ReadOnlyBulletList = BulletList.extend(noListCreation)
+const ReadOnlyOrderedList = OrderedList.extend(noListCreation)
+
 export function buildExtensions() {
   return [
     StarterKit.configure({
@@ -563,8 +577,13 @@ export function buildExtensions() {
       horizontalRule: false,
       code: false, // Ctrl+E를 가운데 정렬로 쓰기 위해 인라인 코드 단축키 비활성화
       hardBreak: false, // ↵ 표시용 MarkedHardBreak로 대체
+      bulletList: false, // 목록은 새로 만들지 않음 → 아래 ReadOnlyList로 대체
+      orderedList: false,
+      listKeymap: false,
       link: { openOnClick: false, autolink: true, defaultProtocol: 'https' },
     }),
+    ReadOnlyBulletList,
+    ReadOnlyOrderedList,
     TextStyleKit.configure({ lineHeight: false, fontFamily: false }), // 글꼴은 전역 통일(Pretendard) — 개별 글꼴 지정 없음
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
     LineHeight,

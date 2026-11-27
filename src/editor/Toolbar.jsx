@@ -292,8 +292,6 @@ export default function Toolbar({ editor, onMath, onLink, onImage }) {
       </div>
 
       <div className="tb-group">
-        <Btn icon="listBullet" label="글머리 기호 목록" active={editor.isActive('bulletList')} onClick={() => c().toggleBulletList().run()} />
-        <Btn icon="listOrdered" label="번호 목록" active={editor.isActive('orderedList')} onClick={() => c().toggleOrderedList().run()} />
         <Btn icon="quote" label="인용구" active={editor.isActive('blockquote')} onClick={() => c().toggleBlockquote().run()} />
         <DividerMenu onPick={(v) => insertDivider(editor, v)} />
       </div>
