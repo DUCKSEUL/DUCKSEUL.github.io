@@ -94,8 +94,13 @@ export default function JournalPost() {
   const onBodyClick = (e) => {
     const img = e.target.closest('img')
     if (!img || !bodyRef.current.contains(img)) return
-    const cap = img.closest('figure')?.querySelector('figcaption')?.textContent
-    setLightbox({ src: img.currentSrc || img.src, alt: cap || img.alt })
+    // 본문 안 모든 사진을 갤러리로 넘기고, 누른 사진의 순서에서 시작 (← → 로 이전·다음)
+    const imgs = [...bodyRef.current.querySelectorAll('img')]
+    const items = imgs.map((el) => ({
+      src: el.currentSrc || el.src,
+      alt: el.closest('figure')?.querySelector('figcaption')?.textContent || el.alt,
+    }))
+    setLightbox({ items, index: Math.max(0, imgs.indexOf(img)) })
   }
 
   const copyNaver = async () => {
@@ -227,7 +232,12 @@ export default function JournalPost() {
       </div>
 
       <BackToTop />
-      <Lightbox src={lightbox?.src} alt={lightbox?.alt} onClose={() => setLightbox(null)} />
+      <Lightbox
+        items={lightbox?.items}
+        index={lightbox?.index ?? 0}
+        onIndex={(index) => setLightbox((lb) => (lb ? { ...lb, index } : lb))}
+        onClose={() => setLightbox(null)}
+      />
 
       <Modal
         open={confirmDel}

@@ -4,6 +4,8 @@
 // - 화면 맞춤(Fit) ↔ 원본 100%(1:1) 전환: 버튼 · 사진 클릭 · 키 0/1
 // - 확대/축소: + / − 버튼 · 키 +/− · 마우스 휠(커서 위치 기준) · 드래그로 이동
 // - 닫기: Esc · 배경 클릭 · 오른쪽 위 ×
+// - 갤러리: 글 안 사진이 2장 이상이면 ← → 키 · 좌우 화살표 버튼으로 이전·다음 (끝에서 처음으로 순환), 순서 표시 n / N
+//   사진을 넘기면 배율·이동 위치는 화면 맞춤으로 초기화
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from './ui.jsx'
@@ -15,7 +17,7 @@ const SLIDER_MIN = 25 // 줌 슬라이더 범위(%)
 const SLIDER_MAX = 400
 const PAD = 32 // 화면 맞춤 시 여백
 
-export default function Lightbox({ src, alt, onClose }) {
+export default function Lightbox({ items, index = 0, onIndex, onClose }) {
   const stageRef = useRef(null)
   const imgRef = useRef(null)
   const anchor = useRef(null) // 확대 기준점 { cx, cy, ix, iy } (화면 좌표, 이미지 원본 좌표)
@@ -23,18 +25,51 @@ export default function Lightbox({ src, alt, onClose }) {
   const [nat, setNat] = useState(null) // { w, h }
   const [scale, setScale] = useState(1)
   const [mode, setMode] = useState('fit') // 'fit' | 'free'
+  const [wrapNote, setWrapNote] = useState(null) // 끝에서 순환할 때 잠깐 띄우는 안내
+
+  const count = items?.length || 0
+  const cur = count ? items[Math.min(Math.max(0, index), count - 1)] : null
+  const src = cur?.src
+  const alt = cur?.alt
+  const multi = count > 1
+
+  const go = useCallback(
+    (dir) => {
+      if (!multi) return
+      const next = (index + dir + count) % count
+      if (dir > 0 && next === 0) setWrapNote('마지막 사진 → 처음으로')
+      else if (dir < 0 && next === count - 1) setWrapNote('첫 사진 → 마지막으로')
+      else setWrapNote(null)
+      onIndex?.(next)
+    },
+    [multi, index, count, onIndex],
+  )
+
+  useEffect(() => {
+    if (!wrapNote) return
+    const t = setTimeout(() => setWrapNote(null), 1400)
+    return () => clearTimeout(t)
+  }, [wrapNote, index])
 
   const fitScale = useCallback(() => {
     const el = stageRef.current
     if (!nat || !el) return 1
-    return Math.min(1, (el.clientWidth - PAD * 2) / nat.w, (el.clientHeight - PAD * 2 - 56) / nat.h)
-  }, [nat])
+    const side = multi && el.clientWidth > 560 ? 48 : 0 // 좌우 화살표 버튼 자리만큼 비워 사진을 가리지 않게
+    return Math.min(1, (el.clientWidth - (PAD + side) * 2) / nat.w, (el.clientHeight - PAD * 2 - 56) / nat.h)
+  }, [nat, multi])
 
-  // 사진이 바뀌면 초기화
-  useEffect(() => {
+  // 사진이 바뀌면 초기화: 화면 맞춤 · 이동(스크롤) 위치 처음으로 · 진행 중이던 확대 기준점 취소
+  useLayoutEffect(() => {
     setNat(null)
     setMode('fit')
-  }, [src])
+    anchor.current = null
+    drag.current = null
+    const el = stageRef.current
+    if (el) {
+      el.scrollLeft = 0
+      el.scrollTop = 0
+    }
+  }, [src, index])
 
   // 화면 맞춤 모드: 창 크기에 맞춰 다시 계산
   useLayoutEffect(() => {
@@ -89,17 +124,23 @@ export default function Lightbox({ src, alt, onClose }) {
   useEffect(() => {
     if (!src) return
     const onKey = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return
       if (e.key === 'Escape') onClose()
+      // 슬라이더에 포커스가 있어도 ← → 는 사진 넘기기 (배율 조절은 슬라이더 드래그 · +/− 키)
+      else if (e.key === 'ArrowRight' && multi) go(1)
+      else if (e.key === 'ArrowLeft' && multi) go(-1)
       else if (e.key === '+' || e.key === '=') zoomTo(scale * STEP)
       else if (e.key === '-' || e.key === '_') zoomTo(scale / STEP)
       else if (e.key === '0') setMode('fit')
       else if (e.key === '1') zoomTo(1)
       else return
       e.preventDefault()
+      e.stopPropagation()
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [src, onClose, zoomTo, scale])
+    // 캡처 단계: 포커스된 슬라이더가 화살표 키로 값을 바꾸기 전에 처리
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [src, onClose, zoomTo, scale, multi, go])
 
   // 배경 스크롤 잠금
   useEffect(() => {
@@ -167,6 +208,7 @@ export default function Lightbox({ src, alt, onClose }) {
       >
         <div className="lb-canvas">
           <img
+            key={`${index}|${src}`} // 사진마다 새 요소 → 같은 주소여도 onLoad로 크기 다시 계산
             ref={imgRef}
             src={src}
             alt={alt || ''}
@@ -184,6 +226,26 @@ export default function Lightbox({ src, alt, onClose }) {
         <Icon name="close" size={26} />
       </button>
 
+      {multi && (
+        <>
+          <button type="button" className="lb-nav is-prev" onClick={() => go(-1)} aria-label="이전 사진" title="이전 사진 (←)">
+            <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden>
+              <path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <button type="button" className="lb-nav is-next" onClick={() => go(1)} aria-label="다음 사진" title="다음 사진 (→)">
+            <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden>
+              <path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          {wrapNote && (
+            <div className="lb-wrap-note" role="status" key={`${wrapNote}|${index}`}>
+              {wrapNote}
+            </div>
+          )}
+        </>
+      )}
+
       <div
         className="lb-bar"
         role="toolbar"
@@ -192,6 +254,14 @@ export default function Lightbox({ src, alt, onClose }) {
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
+        {multi && (
+          <>
+            <span className="lb-count" aria-live="polite" aria-label={`${count}장 중 ${index + 1}번째 사진`}>
+              {index + 1} / {count}
+            </span>
+            <span className="lb-sep lb-sep-count" />
+          </>
+        )}
         <button type="button" className="lb-step" onClick={() => zoomTo(scale / STEP)} aria-label="축소" title="축소 (−)">
           −
         </button>
