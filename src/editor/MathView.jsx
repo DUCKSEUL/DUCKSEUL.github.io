@@ -11,7 +11,8 @@ import katex from 'katex'
 import { renderLatex } from '../lib/math.js'
 import MathPalette, { applyTemplate } from './MathPalette.jsx'
 import MatrixEditor from './MatrixEditor.jsx'
-import { autoCorrectSpace, hasMatrix, toLatex } from './mathTools.js'
+import { hasMatrix } from './mathTools.js'
+import BuildupField, { fieldLatex } from './BuildupField.jsx'
 
 export const MATH_PLACEHOLDER = '여기에 수식을 입력하세요.'
 
@@ -30,7 +31,10 @@ export default function MathView({ node, editor, getPos, selected }) {
   const editing = selected && editor.isEditable
   const html = useMemo(() => (latex ? renderLatex(latex, display) : ''), [latex, display])
 
-  const [value, setValue] = useState(latex)
+  // 입력 상자 = 빌드업된 칩(tokens) + 입력 중인 텍스트(text) — Word/PPT식 Space 빌드업
+  const [field, setField] = useState({ tokens: [], text: latex })
+  const value = field.text
+  const setValue = (text) => setField((f) => ({ ...f, text }))
   const [error, setError] = useState(null)
   const inputRef = useRef(null)
   const done = useRef(false) // 한 번의 편집에서 확정이 두 번(Enter 후 blur) 일어나지 않게
@@ -79,7 +83,7 @@ export default function MathView({ node, editor, getPos, selected }) {
     pendingSel.current = null
     el.focus({ preventScroll: true })
     el.setSelectionRange(sel[0], sel[1])
-  }, [value])
+  }, [field])
 
   // 편집 시작: 원본 LaTeX를 불러옴. 행렬 수식은 LaTeX로 풀지 않고 선택 표시부터
   useLayoutEffect(() => {
@@ -88,7 +92,7 @@ export default function MathView({ node, editor, getPos, selected }) {
       return
     }
     done.current = false
-    setValue(latex)
+    setField({ tokens: [], text: latex })
     setError(null)
     enterSide.current = editor.storage.mathNav?.enterSide
     if (editor.storage.mathNav) editor.storage.mathNav.enterSide = null
@@ -141,7 +145,7 @@ export default function MathView({ node, editor, getPos, selected }) {
     const cur = state.doc.nodeAt(pos)
     if (!cur || cur.type !== node.type) return
     // 화면용 기호(±, α …)는 표준 LaTeX 명령으로 되돌려 저장
-    const text = override ?? toLatex(inputRef.current?.value ?? value).trim()
+    const text = override ?? fieldLatex({ tokens: field.tokens, text: inputRef.current?.value ?? value })
     let tr = state.tr
     if (!text) {
       tr = tr.delete(pos, pos + cur.nodeSize)
@@ -172,17 +176,11 @@ export default function MathView({ node, editor, getPos, selected }) {
     const el = e.currentTarget
     const atStart = el.selectionStart === 0 && el.selectionEnd === 0
     const atEnd = el.selectionStart === el.value.length && el.selectionEnd === el.value.length
-    if (e.key === ' ') {
-      // 수식 자동 고침: '\pm' + Space → '±'
-      const r = autoCorrectSpace(el)
-      if (r) {
-        e.preventDefault()
-        setValue(r.value)
-        pendingSel.current = [r.caret, r.caret]
-      }
-    } else if (e.key === 'Enter') {
+    // Space 빌드업 · 기호 자동 고침 · 칩 되돌리기(Backspace/←)는 BuildupField가 먼저 처리
+    if (e.key === 'Enter') {
       e.preventDefault()
-      const err = el.value.trim() ? parseError(toLatex(el.value).trim(), display) : null
+      const all = fieldLatex({ tokens: field.tokens, text: el.value })
+      const err = all ? parseError(all, display) : null
       if (err) {
         setError(err) // 문법 오류: 상자에 머물며 오류만 표시
         return
@@ -213,7 +211,7 @@ export default function MathView({ node, editor, getPos, selected }) {
   const toggleDisplay = () => {
     const pos = getPos()
     if (typeof pos !== 'number') return
-    const text = toLatex(inputRef.current?.value ?? value).trim()
+    const text = fieldLatex({ tokens: field.tokens, text: inputRef.current?.value ?? value })
     const typeName = display ? 'mathInline' : 'mathBlock'
     done.current = true
     if (editor.storage.mathNav) editor.storage.mathNav.enterSide = 'end'
@@ -266,19 +264,19 @@ export default function MathView({ node, editor, getPos, selected }) {
           className={`math-box ${error ? 'has-error' : ''}`}
           title="Enter 확정 · Esc 닫기 · Alt+3 인라인/블록 전환"
           onMouseDown={(e) => {
-            if (e.target === inputRef.current) return
+            if (e.target === inputRef.current || e.target.closest?.('.bu-chip')) return
             e.preventDefault() // 상자 여백·배지를 눌러도 입력 포커스 유지 (커서는 끝으로)
             const el = inputRef.current
             el?.focus()
             el?.setSelectionRange(el.value.length, el.value.length)
           }}
         >
-          <input
-            ref={inputRef}
-            className="math-box-input"
-            value={value}
-            onChange={(e) => {
-              setValue(e.target.value)
+          <BuildupField
+            field={field}
+            inputRef={inputRef}
+            inputClassName="math-box-input"
+            onChange={(f) => {
+              setField(f)
               if (error) setError(null)
             }}
             onKeyDown={onKeyDown}
@@ -288,10 +286,8 @@ export default function MathView({ node, editor, getPos, selected }) {
               if (document.hasFocus()) commit(null)
             }}
             placeholder={MATH_PLACEHOLDER}
-            spellCheck={false}
-            autoComplete="off"
-            aria-label="LaTeX 수식 입력 (Enter 확정)"
-            style={{ width: `${value ? Math.max(2, value.length + 1) : MATH_PLACEHOLDER.length * 1.95}ch` }}
+            minCh={MATH_PLACEHOLDER.length * 1.95}
+            aria-label="LaTeX 수식 입력 (Space 수식 변환 · Enter 확정)"
           />
           <span className="math-box-hint" aria-hidden>
             Enter ↵
@@ -302,7 +298,7 @@ export default function MathView({ node, editor, getPos, selected }) {
             </span>
           )}
         </span>
-        <MathPalette anchorRef={boxRef} onInsert={insertTemplate} deps={`${value}|${error}`} />
+        <MathPalette anchorRef={boxRef} onInsert={insertTemplate} deps={`${field.tokens.length}|${value}|${error}`} />
         </>
       ) : (
         <>

@@ -1766,3 +1766,68 @@ li.paper,
   font-size: 11px;
   white-space: nowrap;
 }
+
+/* ═══ v18: Word/PPT식 Space 빌드업 — 입력 칸 안의 렌더링된 수식 칩 (편집 화면 전용) ═══ */
+.bu-field {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1px;
+  min-width: 0;
+}
+.bu-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 2px;
+  border-radius: 4px;
+  color: var(--math-ink);
+  font-size: 1.02em;
+  line-height: 1.2;
+  cursor: text;
+  user-select: none;
+  transition: background 0.1s;
+}
+.bu-chip:hover {
+  background: color-mix(in srgb, var(--math-border) 16%, transparent);
+}
+.bu-chip .katex {
+  font-size: 1em;
+}
+/* 행렬 편집기: 칸(점선 테두리)은 감싸는 요소, 실제 입력은 안쪽 input */
+.mx-cell,
+.mx-side {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto !important;
+  min-width: 2ch;
+  height: auto;
+  min-height: 1.7em;
+}
+.mx-cell:focus-within,
+.mx-side:focus-within {
+  border-style: solid;
+  border-color: var(--math-border);
+  background: color-mix(in srgb, var(--math-border) 10%, transparent);
+}
+.mx-input {
+  box-sizing: content-box;
+  min-width: 1ch;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--math-ink);
+  caret-color: var(--math-caret) !important;
+  font: inherit;
+  text-align: inherit;
+}
+.mx-side:has(.mx-input:placeholder-shown) {
+  opacity: 0.6;
+}
+.mx-input::placeholder {
+  color: var(--math-hint);
+}
+.ProseMirror-hideselection .mx-input {
+  caret-color: var(--math-caret) !important;
+}

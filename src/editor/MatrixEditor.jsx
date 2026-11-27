@@ -1,10 +1,13 @@
 // PowerPoint 스타일 시각적 행렬 편집기 (행렬이 들어 있는 수식을 더블 클릭하면 열림)
 // - 괄호 모양([ ] / ( ) / | |)은 그대로 보이고, 원소마다 점선 입력 칸 — 행렬 앞뒤 수식(예: \mathbf S^{(x)} =)도 각각 별도 칸
-// - Tab / Shift+Tab / 방향키로 칸 이동, '\pm' + Space → '±' 자동 고침
+// - Tab / Shift+Tab / 방향키로 칸 이동
+// - 칸마다 Word/PPT식 Space 빌드업: '\mathrm{S}' + Space → 렌더링된 칩, Backspace로 원본 되돌리기 (BuildupField)
+//   기존 원소는 렌더링된 칩으로 보여 줌 → 고칠 때는 클릭 또는 Backspace
 // - 위쪽 미니 바: + 행 / − 행 / + 열 / − 열 / 괄호 전환 / 완료
 // - Enter 또는 바깥 클릭 → LaTeX로 재조립해 확정 (Ctrl+Z로 되돌리기), Esc → 변경 취소
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { autoCorrectSpace, isValidLatex, parseMatrix, serializeMatrix, toLatex, toSymbols } from './mathTools.js'
+import { isValidLatex, parseMatrix, serializeMatrix } from './mathTools.js'
+import BuildupField, { fieldFrom, fieldLatex } from './BuildupField.jsx'
 
 const BRACKETS = [
   { env: 'bmatrix', label: '[ ]', title: '대괄호 (bmatrix)' },
@@ -12,15 +15,16 @@ const BRACKETS = [
   { env: 'vmatrix', label: '| |', title: '행렬식 (vmatrix)' },
 ]
 
-const width = (v, min = 2) => `${Math.max(min, [...(v || '')].length + 1)}ch`
+const EMPTY = () => ({ tokens: [], text: '' })
 
 export default function MatrixEditor({ latex, display, onCommit, onCancel }) {
   const [state, setState] = useState(() => {
     const m = parseMatrix(latex)
-    return { pre: toSymbols(m.pre), post: toSymbols(m.post), env: m.env, rows: m.rows.map((r) => r.map(toSymbols)) }
+    return { pre: fieldFrom(m.pre), post: fieldFrom(m.post), env: m.env, rows: m.rows.map((r) => r.map((c) => fieldFrom(c))) }
   })
   const [error, setError] = useState(null)
-  const fields = useRef(new Map()) // 'pre' | 'post' | 'r-c' → input
+  const refs = useRef({}) // 'pre' | 'post' | 'r-c' → { current: input }
+  const refOf = (key) => (refs.current[key] ||= { current: null })
   const focusKey = useRef('0-0')
   const pending = useRef(null) // 다음 렌더 후 포커스할 { key, caret }
   const boxRef = useRef(null)
@@ -32,7 +36,7 @@ export default function MatrixEditor({ latex, display, onCommit, onCancel }) {
   const order = ['pre', ...rows.flatMap((r, ri) => r.map((_, ci) => `${ri}-${ci}`)), 'post']
 
   const focus = (key, caret = 'end') => {
-    const el = fields.current.get(key)
+    const el = refs.current[key]?.current
     if (!el) return
     el.focus({ preventScroll: true })
     const at = caret === 'start' ? 0 : caret === 'end' ? el.value.length : caret
@@ -59,10 +63,10 @@ export default function MatrixEditor({ latex, display, onCommit, onCancel }) {
 
   const build = () =>
     serializeMatrix({
-      pre: toLatex(state.pre),
-      post: toLatex(state.post),
+      pre: fieldLatex(state.pre),
+      post: fieldLatex(state.post),
       env: state.env,
-      rows: state.rows.map((r) => r.map(toLatex)),
+      rows: state.rows.map((r) => r.map(fieldLatex)),
     })
 
   /** move: 'after' = 커서를 수식 오른쪽으로(Enter·완료) / null = 커서 이동 없음(바깥 클릭 — 클릭한 자리 그대로) */
@@ -95,7 +99,7 @@ export default function MatrixEditor({ latex, display, onCommit, onCancel }) {
   const ops = {
     addRow: () => {
       const [r, c] = cur()
-      setState((s) => ({ ...s, rows: [...s.rows.slice(0, r + 1), Array(nCols).fill(''), ...s.rows.slice(r + 1)] }))
+      setState((s) => ({ ...s, rows: [...s.rows.slice(0, r + 1), Array.from({ length: nCols }, EMPTY), ...s.rows.slice(r + 1)] }))
       pending.current = { key: `${r + 1}-${c}`, caret: 'end' }
     },
     delRow: () => {
@@ -106,7 +110,7 @@ export default function MatrixEditor({ latex, display, onCommit, onCancel }) {
     },
     addCol: () => {
       const [r, c] = cur()
-      setState((s) => ({ ...s, rows: s.rows.map((row) => [...row.slice(0, c + 1), '', ...row.slice(c + 1)]) }))
+      setState((s) => ({ ...s, rows: s.rows.map((row) => [...row.slice(0, c + 1), EMPTY(), ...row.slice(c + 1)]) }))
       pending.current = { key: `${r}-${c + 1}`, caret: 'end' }
     },
     delCol: () => {
@@ -131,14 +135,8 @@ export default function MatrixEditor({ latex, display, onCommit, onCancel }) {
       e.preventDefault()
       if (to) focus(to, caret)
     }
-    if (e.key === ' ') {
-      const r = autoCorrectSpace(el)
-      if (r) {
-        e.preventDefault()
-        setField(key, r.value)
-        pending.current = { key, caret: r.caret }
-      }
-    } else if (e.key === 'Enter') {
+    // Space 빌드업 · 칩 되돌리기는 BuildupField가 먼저 처리
+    if (e.key === 'Enter') {
       e.preventDefault()
       commit()
     } else if (e.key === 'Escape') {
@@ -166,17 +164,16 @@ export default function MatrixEditor({ latex, display, onCommit, onCancel }) {
     commit(null)
   }
 
-  const input = (key, value, cls, placeholder) => (
-    <input
+  const input = (key, field, cls, placeholder) => (
+    <BuildupField
       key={key}
-      ref={(el) => (el ? fields.current.set(key, el) : fields.current.delete(key))}
+      field={field}
+      inputRef={refOf(key)}
       className={cls}
-      value={value}
+      inputClassName="mx-input"
       placeholder={placeholder}
-      spellCheck={false}
-      autoComplete="off"
-      style={{ width: width(value, placeholder ? 3 : 2) }}
-      onChange={(e) => setField(key, e.target.value)}
+      minCh={placeholder ? 3 : 2}
+      onChange={(f) => setField(key, f)}
       onKeyDown={onKeyDown(key)}
       onFocus={() => (focusKey.current = key)}
       aria-label={key === 'pre' ? '행렬 앞 수식' : key === 'post' ? '행렬 뒤 수식' : `${Number(key.split('-')[0]) + 1}행 ${Number(key.split('-')[1]) + 1}열`}
