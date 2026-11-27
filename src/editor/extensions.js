@@ -420,6 +420,55 @@ export const ImageDeleteGuard = Extension.create({
   },
 })
 
+/**
+ * 사진 선택 · 커서 시각 보정 (편집 화면 전용 — 저장 HTML과 무관한 데코레이션)
+ * 1) 드래그(범위) 선택에 들어온 사진마다 .is-selected-range → 파란 반투명 하이라이트가 하나씩 차례로 켜지고 해제 시 바로 꺼짐
+ *    (ProseMirror가 브라우저 selectionchange를 받아 선택을 갱신할 때마다 다시 계산 → 드래그 중에도 실시간)
+ * 2) 커서가 사진 바로 오른쪽/왼쪽이면 사진 높이만큼 큰 커서(Word처럼) — 글자 크기만 한 기본 커서는 그 줄에서 숨김
+ */
+export const ImageSelectionVisuals = Extension.create({
+  name: 'imageSelectionVisuals',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey('imageSelectionVisuals'),
+        props: {
+          decorations(state) {
+            const { selection, doc } = state
+            const decos = []
+            if (!selection.empty && !(selection instanceof NodeSelection)) {
+              for (const r of selection.ranges) {
+                const from = r.$from.pos
+                const to = r.$to.pos
+                doc.nodesBetween(from, to, (node, pos) => {
+                  if (isImage(node) && pos >= from && pos + node.nodeSize <= to) {
+                    decos.push(Decoration.node(pos, pos + node.nodeSize, { class: 'is-selected-range' }))
+                  }
+                })
+              }
+            } else if (selection instanceof TextSelection && selection.empty && selection.$from.parent.isTextblock) {
+              const $p = selection.$from
+              const before = $p.nodeBefore
+              const after = $p.nodeAfter
+              const para = $p.before()
+              let hit = false
+              if (isImage(before)) {
+                decos.push(Decoration.node($p.pos - before.nodeSize, $p.pos, { class: 'img-caret-after' }))
+                hit = true
+              } else if (isImage(after) && !(before?.isText)) {
+                decos.push(Decoration.node($p.pos, $p.pos + after.nodeSize, { class: 'img-caret-before' }))
+                hit = true
+              }
+              if (hit) decos.push(Decoration.node(para, para + $p.parent.nodeSize, { class: 'has-img-caret' }))
+            }
+            return decos.length ? DecorationSet.create(doc, decos) : null
+          },
+        },
+      }),
+    ]
+  },
+})
+
 /* ── 강제 줄바꿈(Shift+Enter): 에디터 화면에만 ↵ 표시 ──
  * 노드 뷰는 편집 화면에만 쓰이고, 저장 HTML(getHTML)은 renderHTML의 <br> 그대로라
  * 상세 보기·네이버 복사에는 기호가 들어가지 않습니다. */
@@ -706,6 +755,7 @@ export function buildExtensions() {
     Divider,
     Figure,
     ImageDeleteGuard,
+    ImageSelectionVisuals,
     TableKit.configure({ table: { resizable: false }, tableCell: false, tableHeader: false }),
     Cell,
     Header,

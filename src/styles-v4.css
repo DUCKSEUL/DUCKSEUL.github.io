@@ -1718,3 +1718,77 @@ li.paper,
   margin: 0 3px;
   background: var(--math-pal-line);
 }
+
+/* ═══ v20: 사진 줄 — Word처럼 [사진][커서][↵]를 사진 아랫변(기준선)에 맞춰 나란히 · 드래그 다중 선택 하이라이트 ═══ */
+/* 사진 아랫변 = 글자 기준선 → 커서·↵가 사진 오른쪽 아래 모서리 옆에 놓임 (편집 화면 전용) */
+.editor-content .img-node {
+  vertical-align: baseline;
+  margin-bottom: 0; /* 아래 여백이 있으면 사진 아랫변이 기준선보다 떠서 ↵·커서와 어긋남 */
+}
+/* 예전 '오른쪽 여백 허공에 절대 위치' 규칙 해제 → 흐름 안에서 사진 바로 다음 (폭 0 규칙(v16)은 그대로라 가운데 정렬이 밀리지 않음) */
+.editor-content p:has(> .img-node)::after {
+  position: static;
+  right: auto;
+  bottom: auto;
+  line-height: inherit;
+}
+/* 사진 바로 옆 커서: 글자 크기만 한 기본 커서 대신 사진 높이의 커서 (깜빡임) */
+.editor-content .has-img-caret {
+  caret-color: transparent;
+}
+.editor-content .img-node.img-caret-after::after,
+.editor-content .img-node.img-caret-before::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  width: 2px;
+  height: 100%;
+  min-height: 1.2em;
+  border-radius: 1px;
+  background: currentColor;
+  pointer-events: none;
+  opacity: 0;
+}
+.editor-content .img-node.img-caret-after::after {
+  right: -3px;
+}
+.editor-content .img-node.img-caret-before::after {
+  left: -3px;
+}
+.ProseMirror-focused .img-node.img-caret-after::after,
+.ProseMirror-focused .img-node.img-caret-before::after {
+  animation: img-caret-blink 1.06s steps(1) infinite;
+}
+@keyframes img-caret-blink {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
+/* 드래그 범위 선택에 들어온 사진: 파란 테두리 + 반투명 하이라이트 (부드럽게 켜지고 꺼짐) */
+.editor-content .img-node::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.24);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.editor-content .img-node {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition: outline-color 0.15s ease, box-shadow 0.15s ease;
+}
+.editor-content .img-node.is-selected-range {
+  outline-color: #3b82f6;
+  box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.18);
+}
+.editor-content .img-node.is-selected-range::before {
+  opacity: 1;
+}
+/* 브라우저 기본 선택 칠(회색·파랑 덧칠)과 겹치지 않게 */
+.editor-content .img-node img::selection,
+.editor-content .img-node::selection {
+  background: transparent;
+}
