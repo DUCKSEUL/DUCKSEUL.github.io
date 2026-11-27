@@ -46,7 +46,14 @@ function mathNode(name, inline) {
       return node.attrs.latex
     },
     addNodeView() {
-      return ReactNodeViewRenderer(MathView)
+      return ReactNodeViewRenderer(MathView, {
+        // 수식 편집기(MathLive <math-field> · LaTeX 상자) 안의 키·마우스·붙여넣기는 에디터가 가로채지 않게
+        // 그 밖(렌더링된 수식)의 클릭은 에디터가 처리 → 노드 선택 = 편집기 열기
+        stopEvent: ({ event }) => {
+          if (event.target?.closest?.('.ml-box, .math-box')) return true
+          return !/^(mouse|click|dblclick|drag|drop|copy|paste|cut)/.test(event.type)
+        },
+      })
     },
   })
 }

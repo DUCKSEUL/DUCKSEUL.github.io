@@ -10,8 +10,7 @@ import { NodeSelection, TextSelection } from '@tiptap/pm/state'
 import katex from 'katex'
 import { renderLatex } from '../lib/math.js'
 import MathPalette, { applyTemplate } from './MathPalette.jsx'
-import MatrixEditor from './MatrixEditor.jsx'
-import { hasMatrix } from './mathTools.js'
+import VisualMath from './VisualMath.jsx'
 import BuildupField, { fieldLatex } from './BuildupField.jsx'
 
 export const MATH_PLACEHOLDER = '여기에 수식을 입력하세요.'
@@ -41,28 +40,11 @@ export default function MathView({ node, editor, getPos, selected }) {
   const boxRef = useRef(null)
   const pendingSel = useRef(null) // 팔레트로 삽입한 뒤 옮길 입력 커서/선택 범위
   const enterSide = useRef(null)
-  // 'raw' = LaTeX 입력 상자 / 'selected' = 행렬 수식 선택 표시 / 'matrix' = 시각적 행렬 편집기
-  const [modeState, setMode] = useState(null) // null = 자동(행렬이면 'selected', 아니면 'raw') — 첫 렌더부터 정확히
-  const isMatrix = hasMatrix(latex)
-  const mode = modeState ?? (isMatrix ? 'selected' : 'raw')
-  const wrapRef = useRef(null)
-
-  // 행렬 수식 더블 클릭 → 시각적 행렬 편집기 (노드 뷰 안이라 React 합성 이벤트 대신 DOM 이벤트로)
-  useEffect(() => {
-    const el = wrapRef.current
-    if (!el) return
-    const onDbl = (e) => {
-      if (!editor.isEditable || !hasMatrix(node.attrs.latex) || e.target.closest?.('.mx-editor, .math-box')) return
-      e.preventDefault()
-      const pos = getPos()
-      if (typeof pos === 'number' && !(editor.state.selection instanceof NodeSelection && editor.state.selection.from === pos)) {
-        editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos)))
-      }
-      setMode('matrix')
-    }
-    el.addEventListener('dblclick', onDbl)
-    return () => el.removeEventListener('dblclick', onDbl)
-  })
+  // 'visual' = PowerPoint식 구조 편집기(기본, MathLive) / 'raw' = LaTeX 원문 입력 상자('TeX' 버튼)
+  const [modeState, setMode] = useState(null)
+  const mode = modeState ?? 'visual'
+  const [draft, setDraft] = useState(null) // 원문 ↔ 구조 편집 전환 시 넘겨줄 LaTeX
+  const visualApi = useRef(null)
 
   // 퀵 팔레트: 현재 커서(선택) 위치에 템플릿 삽입 → 첫 입력 자리로 커서 이동, 포커스 유지
   const insertTemplate = (ins) => {
@@ -85,10 +67,11 @@ export default function MathView({ node, editor, getPos, selected }) {
     el.setSelectionRange(sel[0], sel[1])
   }, [field])
 
-  // 편집 시작: 원본 LaTeX를 불러옴. 행렬 수식은 LaTeX로 풀지 않고 선택 표시부터
+  // 편집 시작: 원본 LaTeX를 불러옴 (구조 편집기는 시각적 구조 그대로 열림)
   useLayoutEffect(() => {
     if (!editing) {
       setMode(null)
+      setDraft(null)
       return
     }
     done.current = false
@@ -111,26 +94,6 @@ export default function MathView({ node, editor, getPos, selected }) {
       el.setSelectionRange(at, at)
     })
   }, [editing, mode])
-
-  // 행렬 수식 선택 상태: Enter → LaTeX 편집, Esc → 선택 해제 (나머지 키는 에디터 기본 동작: 방향키 이동 · Backspace 삭제)
-  useEffect(() => {
-    if (!editing || mode !== 'selected') return
-    const onKey = (e) => {
-      if (e.isComposing || e.altKey || e.ctrlKey || e.metaKey) return
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        e.stopPropagation()
-        setMode('raw')
-      } else if (e.key === 'Escape') {
-        e.preventDefault()
-        e.stopPropagation()
-        done.current = false
-        commit('after', latex)
-      }
-    }
-    window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
-  })
 
   /**
    * 확정: 값이 있으면 latex 갱신, 비었으면 수식 삭제.
@@ -211,7 +174,7 @@ export default function MathView({ node, editor, getPos, selected }) {
   const toggleDisplay = () => {
     const pos = getPos()
     if (typeof pos !== 'number') return
-    const text = fieldLatex({ tokens: field.tokens, text: inputRef.current?.value ?? value })
+    const text = mode === 'visual' ? visualApi.current?.get() ?? latex : fieldLatex({ tokens: field.tokens, text: inputRef.current?.value ?? value })
     const typeName = display ? 'mathInline' : 'mathBlock'
     done.current = true
     if (editor.storage.mathNav) editor.storage.mathNav.enterSide = 'end'
@@ -230,7 +193,7 @@ export default function MathView({ node, editor, getPos, selected }) {
 
   // Alt+3을 상자 안에서 다시 누르면 인라인 ↔ 블록 전환 (Write의 단축키 처리기가 이벤트로 알려 줌)
   useEffect(() => {
-    if (!editing || mode !== 'raw') return
+    if (!editing) return
     const on = () => toggleDisplay()
     window.addEventListener('math-toggle-display', on)
     return () => window.removeEventListener('math-toggle-display', on)
@@ -241,20 +204,21 @@ export default function MathView({ node, editor, getPos, selected }) {
       as={display ? 'div' : 'span'}
       className={`math-node ${display ? 'is-block' : 'is-inline'} ${editing ? 'is-editing' : ''} ${!latex && !editing ? 'is-empty' : ''}`}
       data-type={display ? 'math-block' : 'math-inline'}
-      title={editing && mode !== 'selected' ? undefined : isMatrix ? '더블 클릭: 행렬 편집기 · 클릭 후 Enter: LaTeX 편집' : '클릭하거나 ←/→ 키로 들어가 수식 수정'}
-      ref={wrapRef}
+      title={editing ? undefined : '클릭하거나 ←/→ 키로 들어가 수식 수정 (구조 편집)'}
     >
-      {editing && mode === 'matrix' ? (
-        <MatrixEditor
-          latex={latex}
+      {editing && mode === 'visual' ? (
+        <VisualMath
+          latex={draft ?? latex}
           display={display}
+          enterSide={enterSide.current}
+          apiRef={visualApi}
           onCommit={(text, move) => {
             done.current = false
             commit(move, text)
           }}
-          onCancel={(move = 'after') => {
-            done.current = false
-            commit(move, latex)
+          onRaw={(text) => {
+            setField({ tokens: [], text })
+            setMode('raw')
           }}
         />
       ) : editing && mode === 'raw' ? (
@@ -289,6 +253,18 @@ export default function MathView({ node, editor, getPos, selected }) {
             minCh={MATH_PLACEHOLDER.length * 1.95}
             aria-label="LaTeX 수식 입력 (Space 수식 변환 · Enter 확정)"
           />
+          <button
+            type="button"
+            className="ml-tex"
+            title="구조 편집기(점선 칸)로 돌아가기"
+            onClick={() => {
+              done.current = true
+              setDraft(fieldLatex({ tokens: field.tokens, text: inputRef.current?.value ?? value }))
+              setMode('visual')
+            }}
+          >
+            ⬚ 구조
+          </button>
           <span className="math-box-hint" aria-hidden>
             Enter ↵
           </span>
@@ -303,11 +279,6 @@ export default function MathView({ node, editor, getPos, selected }) {
       ) : (
         <>
           <span className={`math-render ${editing ? 'is-picked' : ''}`} dangerouslySetInnerHTML={{ __html: html }} />
-          {editing && mode === 'selected' && (
-            <span className="math-pick-hint" aria-hidden>
-              더블 클릭: 행렬 편집 · Enter: LaTeX
-            </span>
-          )}
         </>
       )}
     </NodeViewWrapper>

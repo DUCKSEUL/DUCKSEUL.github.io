@@ -4,8 +4,11 @@
 import { useLayoutEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import katex from 'katex'
+import { matrixTemplate } from './mathLive.js'
 
 const T = (label, ins, preview) => ({ label, ins, preview: preview ?? ins.replace(/[§¦◊]/g, '') })
+// 구조 편집기(MathLive)용 삽입 문법을 따로 가진 템플릿 (행렬 원소를 모두 빈 칸 #?로)
+const M = (label, ins, ml) => ({ ...T(label, ins), ml })
 const S = (tex) => T(tex, `${tex} `, tex) // 기호: 뒤에 공백을 붙여 다음 글자와 명령이 붙지 않게
 const W = (cmd) => T(`${cmd}{}`, `${cmd}{◊§}`, `${cmd}{${/math(bf|rm)/.test(cmd) ? 'Ab' : 'x'}}`) // 감싸기: 선택한 글자가 있으면 그 글자를 감쌈
 
@@ -16,12 +19,12 @@ export const PALETTE = [
     groups: [
       {
         items: [
-          T('2×2 대괄호 행렬', '\\begin{bmatrix} §a¦ & b \\\\ c & d \\end{bmatrix}'),
-          T('3×3 대괄호 행렬', '\\begin{bmatrix} §a¦ & b & c \\\\ d & e & f \\\\ g & h & i \\end{bmatrix}'),
-          T('2×2 소괄호 행렬', '\\begin{pmatrix} §a¦ & b \\\\ c & d \\end{pmatrix}'),
-          T('행렬식 (det)', '\\begin{vmatrix} §a¦ & b \\\\ c & d \\end{vmatrix}'),
-          T('열벡터 (2×1)', '\\begin{bmatrix} §x¦ \\\\ y \\end{bmatrix}'),
-          T('조건식 (cases)', '\\begin{cases} §x¦, & \\text{if } x \\ge 0 \\\\ -x, & \\text{otherwise} \\end{cases}'),
+          M('2×2 대괄호 행렬', '\\begin{bmatrix} §a¦ & b \\\\ c & d \\end{bmatrix}', matrixTemplate('bmatrix', 2, 2)),
+          M('3×3 대괄호 행렬', '\\begin{bmatrix} §a¦ & b & c \\\\ d & e & f \\\\ g & h & i \\end{bmatrix}', matrixTemplate('bmatrix', 3, 3)),
+          M('2×2 소괄호 행렬', '\\begin{pmatrix} §a¦ & b \\\\ c & d \\end{pmatrix}', matrixTemplate('pmatrix', 2, 2)),
+          M('행렬식 (det)', '\\begin{vmatrix} §a¦ & b \\\\ c & d \\end{vmatrix}', matrixTemplate('vmatrix', 2, 2)),
+          M('열벡터 (2×1)', '\\begin{bmatrix} §x¦ \\\\ y \\end{bmatrix}', matrixTemplate('bmatrix', 2, 1)),
+          M('조건식 (cases)', '\\begin{cases} §x¦, & \\text{if } x \\ge 0 \\\\ -x, & \\text{otherwise} \\end{cases}', '\\begin{cases} #?, & \\text{if } #? \\\\ #?, & \\text{otherwise} \\end{cases}'),
         ],
       },
     ],
@@ -40,6 +43,14 @@ export const PALETTE = [
           T('적분 \\int_{a}^{b}', '\\int_{§a¦}^{b} ', '\\displaystyle\\int_{a}^{b}'),
           T('편미분 \\frac{\\partial }{\\partial }', '\\frac{\\partial §}{\\partial }', '\\dfrac{\\partial f}{\\partial x}'),
           T('극한 \\lim_{x \\to \\infty}', '\\lim_{§x \\to \\infty¦} ', '\\displaystyle\\lim_{x \\to \\infty}'),
+          T('곱 \\prod_{i=1}^{N}', '\\prod_{§i=1¦}^{N} ', '\\displaystyle\\prod_{i=1}^{N}'),
+          T('이중적분 \\iint_{D}', '\\iint_{§D¦} ', '\\displaystyle\\iint_{D}'),
+          T('선적분 \\oint_{C}', '\\oint_{§C¦} ', '\\displaystyle\\oint_{C}'),
+          T('소괄호 \\left( \\right)', '\\left( ◊§ \\right)', '\\left( x \\right)'),
+          T('대괄호 \\left[ \\right]', '\\left[ ◊§ \\right]', '\\left[ x \\right]'),
+          T('중괄호 \\left\\{ \\right\\}', '\\left\\{ ◊§ \\right\\}', '\\left\\{ x \\right\\}'),
+          T('절댓값 \\left| \\right|', '\\left| ◊§ \\right|', '\\left| x \\right|'),
+          T('노름 \\left\\| \\right\\|', '\\left\\| ◊§ \\right\\|', '\\left\\| x \\right\\|'),
         ],
       },
     ],
@@ -187,7 +198,7 @@ export default function MathPalette({ anchorRef, onInsert, deps }) {
                     className="math-pal-btn"
                     title={tip(it)}
                     aria-label={it.label}
-                    onClick={() => onInsert(it.ins)}
+                    onClick={() => onInsert(it.ins, it)}
                   >
                     <span className="math-pal-icon" dangerouslySetInnerHTML={{ __html: icon(it.preview) }} />
                   </button>

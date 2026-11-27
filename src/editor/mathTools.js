@@ -1,6 +1,5 @@
 // 수식 편집 도우미 (편집 화면 전용)
 // - PowerPoint식 수식 자동 고침: '\pm' + Space → '±' (저장할 때는 다시 '\pm'으로)
-// - 행렬 LaTeX 분해/재조립: 앞부분 · \begin{bmatrix} 셀들 \end{bmatrix} · 뒷부분
 // - 본문 '$ … $' 수식 판별
 import katex from 'katex'
 
@@ -21,11 +20,6 @@ const SYM_RE = new RegExp(`[${[...REVERSE.keys()].join('')}]`, 'g')
 /** 화면용 기호 → 표준 LaTeX (뒤에 영문자가 오면 명령이 이어 붙지 않게 공백) */
 export function toLatex(s = '') {
   return s.replace(SYM_RE, (ch, i, str) => `\\${REVERSE.get(ch)}${/[A-Za-z]/.test(str[i + 1] || '') ? ' ' : ''}`)
-}
-
-/** 표준 LaTeX → 화면용 기호 (행렬 셀처럼 '보기 좋게' 편집하는 칸에 불러올 때) */
-export function toSymbols(s = '') {
-  return s.replace(/(?<!\\)\\([A-Za-z]+)(?![A-Za-z]) ?/g, (m, name) => SYMBOLS[name] || m)
 }
 
 /**
@@ -49,75 +43,6 @@ export function isValidLatex(latex, displayMode = false) {
   } catch {
     return false
   }
-}
-
-/* ── 행렬 분해 / 재조립 ── */
-const ENV_RE = /\\begin\{(bmatrix|pmatrix|vmatrix|Vmatrix|Bmatrix|matrix)\}/
-export const hasMatrix = (latex = '') => ENV_RE.test(latex)
-
-/** 중괄호 · 중첩 환경 밖의 행 구분(\\) 또는 열 구분(&)으로 나눔 */
-function splitTop(s, kind) {
-  const parts = []
-  let cur = ''
-  let depth = 0
-  let env = 0
-  for (let i = 0; i < s.length; i++) {
-    const ch = s[i]
-    if (ch === '\\') {
-      if (s.startsWith('\\begin{', i)) env++
-      else if (s.startsWith('\\end{', i)) env--
-      if (kind === 'row' && s[i + 1] === '\\' && depth === 0 && env === 0) {
-        parts.push(cur)
-        cur = ''
-        i++
-        continue
-      }
-      cur += ch + (s[i + 1] ?? '') // \& \{ 같은 이스케이프는 두 글자 그대로
-      i++
-      continue
-    }
-    if (ch === '{') depth++
-    else if (ch === '}') depth--
-    if (kind === 'col' && ch === '&' && depth === 0 && env === 0) {
-      parts.push(cur)
-      cur = ''
-      continue
-    }
-    cur += ch
-  }
-  parts.push(cur)
-  return parts
-}
-
-/** 첫 번째 행렬 환경을 { pre, env, rows: string[][], post }로 (행렬이 없거나 짝이 맞지 않으면 null) */
-export function parseMatrix(latex = '') {
-  const m = ENV_RE.exec(latex)
-  if (!m) return null
-  const bodyStart = m.index + m[0].length
-  const re = /\\(begin|end)\{[A-Za-z*]+\}/g
-  re.lastIndex = bodyStart
-  let depth = 0
-  let end = -1
-  let endLen = 0
-  for (let t; (t = re.exec(latex)); ) {
-    if (t[1] === 'begin') depth++
-    else if (depth === 0) {
-      end = t.index
-      endLen = t[0].length
-      break
-    } else depth--
-  }
-  if (end < 0) return null
-  let rows = splitTop(latex.slice(bodyStart, end), 'row').map((r) => splitTop(r, 'col').map((c) => c.trim()))
-  if (rows.length > 1 && rows[rows.length - 1].every((c) => !c)) rows.pop() // 끝에 붙은 \\ 정리
-  const cols = Math.max(...rows.map((r) => r.length))
-  rows = rows.map((r) => [...r, ...Array(cols - r.length).fill('')])
-  return { pre: latex.slice(0, m.index).trim(), env: m[1], rows, post: latex.slice(end + endLen).trim() }
-}
-
-export function serializeMatrix({ pre = '', env, rows, post = '' }) {
-  const body = rows.map((r) => r.map((c) => c.trim()).join(' & ')).join(' \\\\ ')
-  return [pre.trim(), `\\begin{${env}} ${body} \\end{${env}}`, post.trim()].filter(Boolean).join(' ')
 }
 
 /* ── 본문 '$ … $' 판별 ──
