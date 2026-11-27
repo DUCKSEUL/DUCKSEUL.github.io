@@ -22,7 +22,8 @@ export const SHADOW_CSS = `
   .ML__cmr { font-family: 'STIX Two Text', 'Times New Roman', KaTeX_Main, serif; }
   .ML__mathbf, .ML__bold { font-family: 'STIX Two Text', 'Times New Roman', KaTeX_Main, serif; font-weight: 700; }
   .ML__text { font-family: 'STIX Two Text', 'Times New Roman', serif; }
-  .ML__content { padding: 2px 4px; }
+  .ML__content { padding: 0 1px; min-height: 0; }
+  :host, .ML__container { min-height: 0 !important; padding: 0 !important; }
 `
 
 /** MathLive 출력 LaTeX → 저장용 표준 LaTeX (빈 칸 자리표시는 빈 그룹으로) */

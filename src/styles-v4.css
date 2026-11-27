@@ -2092,201 +2092,191 @@ body.is-img-dragging * {
   cursor: grab;
 }
 
-/* ═══ v23: 연구 일지 목차 — 데스크톱 우측 Sticky(ScrollSpy) · 모바일 플로팅 알약 + 바텀 시트 ═══ */
-/* 본문 위 접이식 목차 박스는 사용하지 않음 */
-.toc-box {
+/* ═══ v24: 인라인 수식 — 앞뒤 커서 자리 + 슬림한 입력 캡슐 (편집 화면 전용) ═══ */
+/* 수식 바로 바깥에 놓인 커서가 수식 테두리에 붙어 '안쪽'처럼 보이지 않게 좌우로 살짝 띄움 */
+.editor-content .math-node.is-inline {
+  margin: 0 2px;
+}
+/* 입력 캡슐: 글자 1~2개 폭에서 시작해 내용만큼 늘어나고, 본문 줄 높이를 거의 바꾸지 않음 */
+.ml-box {
+  gap: 0;
+  padding: 0 5px;
+  border-width: 1px;
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--math-border) 12%, transparent);
+  line-height: 1.2;
+  vertical-align: -0.2em;
+  margin-block: -3px; /* 캡슐 테두리만큼 줄 높이가 늘어나 위아래 문장이 출렁이지 않게 */
+}
+.ml-box.is-block {
+  min-width: 120px;
+  padding: 2px 8px;
+}
+.ml-host {
+  min-width: 0;
+}
+.ml-field {
+  min-width: 1.6em;
+  min-height: 0;
+  padding: 0;
+  font-size: 1em;
+  line-height: 1.2;
+}
+.ml-loading {
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+/* ═══ v25: 연구 일지 목차 — 플로팅 알약 + 팝업 카드 (데스크톱: 오른쪽 중간 · 호버로 펼침 / 터치: 오른쪽 아래 · 탭) ═══ */
+.toc-box,
+.toc-side {
   display: none !important;
 }
-/* 데스크톱: 본문 열(가운데 정렬 유지) 오른쪽 바깥 여백에 고정 */
-.toc-side {
-  display: none;
-  left: calc(100% + 8px);
-  /* 화면이 좁은 데스크톱(1200~1340px)에서도 가로 스크롤이 생기지 않도록 남은 여백만큼만 */
-  width: min(236px, calc((100vw - 100%) / 2 - 28px));
+.toc-float {
+  position: fixed;
+  right: 24px;
+  top: 50%;
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  transform: translateY(-50%);
 }
-.toc-side nav {
-  top: 96px;
-  max-height: calc(100vh - 128px);
-  padding-left: 14px;
-  scrollbar-width: thin;
+.toc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 220px;
+  height: 40px;
+  padding: 0 14px 0 12px;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.14);
+  color: var(--g800);
+  font: inherit;
+  font-size: 0.84rem;
+  cursor: pointer;
+  transition: box-shadow 0.15s, background 0.15s;
 }
-.toc-side .toc-list a {
-  position: relative;
+.toc-float.is-open .toc-pill,
+.toc-pill:hover {
+  background: var(--surface);
+  box-shadow: 0 8px 26px rgba(15, 23, 42, 0.2);
 }
-/* 현재 섹션: 파란 굵은 글씨 + 왼쪽 인디케이터 바 (목차 왼쪽 회색 선 위에 겹침) */
-.toc-side .toc-list a::before {
-  content: '';
+.toc-pill > svg {
+  flex: none;
+  color: var(--blue);
+}
+.toc-pill-label {
+  flex: none;
+  font-weight: 800;
+}
+.toc-pill-cur {
+  min-width: 0;
+  padding-left: 8px;
+  border-left: 1px solid var(--line);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--g600);
+}
+/* 팝업 카드: 데스크톱은 알약 왼쪽에 세로 가운데로 펼쳐짐 — 알약과 붙어 있어 마우스가 지나가도 닫히지 않음 */
+.toc-card {
   position: absolute;
-  top: 6px;
-  bottom: 6px;
-  left: -13px; /* 목차 스크롤 영역 안쪽(회색 선 바로 오른쪽) — 바깥이면 잘림 */
-  width: 3px;
-  border-radius: 2px;
-  background: var(--blue);
-  opacity: 0;
-  transform: scaleY(0.4);
-  transition: opacity 0.18s, transform 0.18s;
+  right: calc(100% + 8px);
+  top: 50%;
+  width: 280px;
+  max-height: min(60vh, 520px);
+  overflow: hidden auto; /* 알약↔카드 사이 8px 틈은 닫힘 유예(150ms)가 덮어 줌 */
+  overscroll-behavior: contain;
+  padding: 12px 8px 8px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2);
+  transform: translateY(-50%);
+  transform-origin: right center;
+  animation: toc-card-side 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.toc-side .toc-list .is-active a {
+@keyframes toc-card-side {
+  from { opacity: 0; transform: translate(8px, -50%) scale(0.98); }
+  to { opacity: 1; transform: translateY(-50%); }
+}
+.toc-card-title {
+  margin: 0 0 6px;
+  padding: 0 8px;
+  color: var(--g500);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.toc-card-title em {
+  margin-left: 2px;
+  font-style: normal;
+  font-weight: 600;
+}
+.toc-card .toc-list a {
+  position: relative;
+  padding: 7px 10px;
+  font-size: 0.88rem;
+}
+.toc-card .toc-list .lv3 a {
+  padding-left: 22px;
+  font-size: 0.84rem;
+}
+.toc-card .toc-list .is-active a {
   background: var(--blue-weak);
   color: var(--blue);
   font-weight: 700;
 }
-.toc-side .toc-list .is-active a::before {
-  opacity: 1;
-  transform: none;
+.toc-card .toc-list .is-active a::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--blue);
 }
-.toc-pill,
-.toc-sheet-wrap {
-  display: none;
-}
-@media (min-width: 1200px) {
-  .toc-side {
-    display: block;
-  }
-}
-@media (max-width: 1199.98px) {
-  /* 플로팅 알약: ☰ 목차 + 현재 읽는 섹션 */
-  .toc-pill {
-    position: fixed;
-    right: 20px;
-    bottom: 24px;
-    z-index: 55;
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    max-width: min(320px, calc(100vw - 40px));
-    height: 44px;
-    padding: 0 16px 0 14px;
-    border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--surface) 82%, transparent);
-    backdrop-filter: blur(12px) saturate(1.4);
-    -webkit-backdrop-filter: blur(12px) saturate(1.4);
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
-    color: var(--g800);
-    font: inherit;
-    font-size: 0.86rem;
-    cursor: pointer;
-    animation: toc-pill-in 0.2s ease-out;
-  }
-  .toc-pill:active {
-    transform: scale(0.98);
-  }
-  .toc-pill > svg {
-    flex: none;
-    color: var(--blue);
-  }
-  .toc-pill-label {
-    flex: none;
-    font-weight: 800;
-  }
-  .toc-pill-cur {
-    min-width: 0;
-    padding-left: 8px;
-    border-left: 1px solid var(--line);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--g600);
-  }
-  /* 맨 위로 버튼은 알약 위로 비켜 줌 */
-  body:has(.journal.has-toc) .to-top {
-    bottom: 80px;
-    right: 20px;
-  }
-  /* 바텀 시트 */
-  .toc-sheet-wrap {
-    position: fixed;
-    inset: 0;
-    z-index: 110;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    background: rgba(10, 14, 20, 0.32);
-    animation: toc-fade 0.18s ease-out;
-  }
-  .toc-sheet {
-    width: min(640px, 100%);
-    max-height: min(72vh, 620px);
-    display: flex;
-    flex-direction: column;
-    padding: 6px 12px calc(16px + env(safe-area-inset-bottom));
-    border-radius: 20px 20px 0 0;
-    background: color-mix(in srgb, var(--surface) 90%, transparent);
-    backdrop-filter: blur(18px) saturate(1.4);
-    -webkit-backdrop-filter: blur(18px) saturate(1.4);
-    box-shadow: 0 -10px 40px rgba(15, 23, 42, 0.22);
-    animation: toc-sheet-up 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
-  }
-  .toc-sheet-grip {
-    width: 40px;
-    height: 4px;
-    margin: 4px auto 8px;
-    border-radius: 999px;
-    background: var(--g300, #d1d6db);
-  }
-  .toc-sheet-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 6px 8px;
-  }
-  .toc-sheet-head strong {
-    font-size: 1rem;
-    color: var(--g900);
-  }
-  .toc-sheet-head em {
-    margin-left: 4px;
-    font-style: normal;
-    font-size: 0.8rem;
-    color: var(--g500);
-  }
-  .toc-sheet-close {
-    display: grid;
-    place-items: center;
-    width: 36px;
-    height: 36px;
-    border: 0;
-    border-radius: 50%;
-    background: var(--fill);
-    color: var(--g700);
-    cursor: pointer;
-  }
-  .toc-sheet .toc-list {
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding-bottom: 4px;
-  }
-  .toc-sheet .toc-list a {
-    padding: 11px 12px;
-    font-size: 0.95rem;
-    border-radius: 10px;
-  }
-  .toc-sheet .toc-list .lv3 a {
-    padding-left: 28px;
-    font-size: 0.9rem;
-  }
-  .toc-sheet .toc-list .is-active a {
-    background: var(--blue-weak);
-  }
-}
-@keyframes toc-pill-in {
-  from { opacity: 0; transform: translateY(8px); }
+@keyframes toc-card-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
   to { opacity: 1; transform: none; }
 }
-@keyframes toc-fade {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes toc-sheet-up {
-  from { transform: translateY(100%); }
-  to { transform: none; }
+/* 터치 기기 · 좁은 화면: 오른쪽 아래 (맨 위로 버튼은 알약 위로 비켜 줌) */
+@media (hover: none), (pointer: coarse), (max-width: 760px) {
+  .toc-float {
+    top: auto;
+    right: 16px;
+    bottom: 24px;
+    transform: none;
+  }
+  .toc-pill {
+    max-width: min(300px, calc(100vw - 32px));
+    height: 44px;
+  }
+  /* 터치: 알약 바로 위로 펼침 */
+  .toc-card {
+    right: 0;
+    top: auto;
+    bottom: calc(100% + 8px);
+    width: min(320px, calc(100vw - 32px));
+    transform: none;
+    transform-origin: bottom right;
+    animation: toc-card-in 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  body:has(.journal.has-toc) .to-top {
+    right: 16px;
+    bottom: 80px;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .toc-sheet,
-  .toc-pill,
-  .toc-sheet-wrap {
+  .toc-card {
     animation: none;
   }
 }

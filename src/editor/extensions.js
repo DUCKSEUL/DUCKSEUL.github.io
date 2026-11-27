@@ -76,12 +76,52 @@ export const MathNav = Extension.create({
       new Plugin({
         key: new PluginKey('mathNav'),
         props: {
+          // 수식 왼쪽·오른쪽 가장자리 클릭 → 편집기를 열지 않고 수식 바로 바깥에 커서 (가운데를 누르면 편집)
+          handleDOMEvents: {
+            mousedown(view, e) {
+              if (e.button !== 0 || e.detail > 1 || !view.editable) return false
+              const el = e.target?.closest?.('.math-node.is-inline')
+              if (!el || el.classList.contains('is-editing') || !view.dom.contains(el)) return false
+              const r = el.getBoundingClientRect()
+              const edge = Math.min(8, r.width * 0.2)
+              const side = e.clientX <= r.left + edge ? 'before' : e.clientX >= r.right - edge ? 'after' : null
+              if (!side) return false
+              const pos = view.posAtDOM(el, 0)
+              const node = view.state.doc.nodeAt(pos)
+              if (!node || !node.type.name.startsWith('math')) return false
+              e.preventDefault()
+              view.focus()
+              view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, side === 'before' ? pos : pos + node.nodeSize)))
+              return true
+            },
+          },
           handleKeyDown(view, e) {
             if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return false
             const { selection } = view.state
             if (!selection.empty) return false
             const { $from } = selection
             const isMath = (n) => n && n.type.name.startsWith('math')
+            const isInlineMath = (n) => n && n.type.name === 'mathInline'
+            const caretAt = (pos) => {
+              view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, pos)).scrollIntoView())
+              return true
+            }
+            // 1단계: 수식 바로 바깥(본문)에 먼저 커서 → 2단계(같은 방향으로 한 번 더): 수식 편집
+            if (e.key === 'ArrowRight') {
+              // 수식 앞 한 글자 → 수식 바로 왼쪽 (브라우저가 공백·경계를 건너뛰며 곧장 수식으로 들어가지 않게)
+              if ($from.nodeAfter?.isText && $from.pos + 1 <= $from.end() && isInlineMath(view.state.doc.resolve($from.pos + 1).nodeAfter)) return caretAt($from.pos + 1)
+              // 줄 끝 → 다음 줄이 수식으로 시작하면 그 줄 맨 앞(수식 왼쪽)
+              if ($from.parentOffset === $from.parent.content.size && $from.depth >= 1) {
+                const next = view.state.doc.resolve($from.after()).nodeAfter
+                if (next?.isTextblock && isInlineMath(next.firstChild)) return caretAt($from.after() + 1)
+              }
+            } else if (e.key === 'ArrowLeft') {
+              if ($from.nodeBefore?.isText && $from.pos - 1 >= $from.start() && isInlineMath(view.state.doc.resolve($from.pos - 1).nodeBefore)) return caretAt($from.pos - 1)
+              if ($from.parentOffset === 0 && $from.depth >= 1) {
+                const prev = view.state.doc.resolve($from.before()).nodeBefore
+                if (prev?.isTextblock && isInlineMath(prev.lastChild)) return caretAt($from.before() - 1)
+              }
+            }
             if (e.key === 'ArrowLeft') {
               if (isMath($from.nodeBefore)) storage.enterSide = 'end'
               else if ($from.parentOffset === 0 && $from.depth >= 1 && isMath(view.state.doc.resolve($from.before()).nodeBefore)) storage.enterSide = 'end'
