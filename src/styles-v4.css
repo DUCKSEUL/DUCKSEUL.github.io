@@ -2280,3 +2280,61 @@ body.is-img-dragging * {
     animation: none;
   }
 }
+
+/* ═══ v26: 편집 화면 사진 최대 폭 98% — 오른쪽 끝에 커서·드래그 시작 여백 확보 (상세 보기는 그대로) ═══ */
+.editor-content .img-node {
+  max-width: 98%;
+}
+
+/* ═══ v27: 목차 알약 — 화면 하단 정중앙 고정, 카드는 알약 바로 위로 펼침 (데스크톱·모바일 공통) ═══ */
+.toc-float,
+.toc-float.toc-float {
+  top: auto;
+  right: auto;
+  left: 50%;
+  bottom: 24px;
+  z-index: 50;
+  align-items: center;
+  transform: translateX(-50%);
+}
+.toc-float .toc-pill {
+  max-width: min(360px, calc(100vw - 150px)); /* 오른쪽 아래 '맨 위로' 버튼과 겹치지 않는 폭 */
+}
+.toc-float .toc-card {
+  top: auto;
+  right: auto;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  width: min(320px, calc(100vw - 32px));
+  max-height: min(60vh, 520px);
+  transform: translateX(-50%);
+  transform-origin: bottom center;
+  animation: toc-card-up 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes toc-card-up {
+  from { opacity: 0; transform: translate(-50%, 8px) scale(0.97); }
+  to { opacity: 1; transform: translateX(-50%); }
+}
+@media (hover: none), (pointer: coarse), (max-width: 760px) {
+  .toc-float.toc-float {
+    right: auto;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+  }
+  .toc-float .toc-card {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    animation: toc-card-up 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  /* 가운데 알약과 겹치지 않으므로 '맨 위로' 버튼은 원래 자리 */
+  body:has(.journal.has-toc) .to-top {
+    bottom: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toc-float .toc-card {
+    animation: none;
+  }
+}

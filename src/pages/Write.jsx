@@ -134,7 +134,17 @@ function EditorPage({ initial, categories }) {
       try {
         const src = await fileToDataUrl(f)
         const at = pos ?? ed.state.selection.from
-        ed.chain().focus().insertContentAt(at, { type: 'image', attrs: { src, alt: '' } }).run()
+        // 원본 파일·해상도는 그대로 두고 화면 표시 폭만: 본문보다 넓은 사진은 본문의 98%로 넣어
+        // 사진 오른쪽 끝에 커서를 두고 클릭·왼쪽 드래그를 시작할 여백을 남김 (작은 사진은 원래 크기 — 늘려서 흐려지지 않게)
+        const natW = await new Promise((res) => {
+          const im = new Image()
+          im.onload = () => res(im.naturalWidth)
+          im.onerror = () => res(0)
+          im.src = src
+        })
+        const box = ed.view.dom.querySelector('p')?.clientWidth || ed.view.dom.clientWidth
+        const width = natW && box && natW >= box * 0.98 ? '98%' : null
+        ed.chain().focus().insertContentAt(at, { type: 'image', attrs: { src, alt: '', width } }).run()
       } catch (e) {
         console.warn(e)
         toast('사진을 불러오지 못했어요.', 'error')

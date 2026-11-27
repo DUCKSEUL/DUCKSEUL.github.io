@@ -43,7 +43,8 @@ const RAW_START = new Set(['_', '^', '/', '\\', '{', '}'])
 // 원문 칸으로 풀어도 되는 '평범한' 원자: 글자·숫자·연산자·괄호·기호 (첨자·분수·근호 같은 구조는 제외)
 const SIMPLE_TYPES = new Set(['mord', 'mbin', 'mrel', 'mopen', 'mclose', 'mpunct', 'minner'])
 const isSimple = (a) =>
-  !!a && SIMPLE_TYPES.has(a.type) && typeof a.value === 'string' && !a.subscript && !a.superscript && !(a.body && a.body.length) && !a.above && !a.below
+  !!a && SIMPLE_TYPES.has(a.type) && typeof a.value === 'string' && !a.subscript && !a.superscript && !(a.body && a.body.length) && !a.above && !a.below &&
+  !a.style?.variantStyle && (!a.style?.variant || a.style.variant === 'normal') // 굵게·정체 등 서식 있는 글자는 풀지 않음(서식 보존)
 
 const modelOf = (mf) => mf._mathfield?.model
 
@@ -69,10 +70,11 @@ function startRaw(mf, ch) {
   if (model && model.selectionIsCollapsed) {
     const pos = model.position
     const cur = model.at(pos)
-    let L = 0
-    for (let a = cur; isSimple(a); a = a.leftSibling) L++
+    // 왼쪽(이미 조립된 기호 η · 글자)은 절대 원문으로 되돌리지 않음 — Space 때 바로 앞 노드를 밑수·분자로 받아 결합
+    // 오른쪽은 '_' '^' '/'를 중간에 끼워 넣을 때만 원문으로 풀어 함께 해석 (예: 20|∘) 에 '^' → 20 + '^\circ)')
+    const L = 0
     let R = 0
-    for (let a = cur?.rightSibling; isSimple(a); a = a.rightSibling) R++
+    if (ch === '_' || ch === '^' || ch === '/') for (let a = cur?.rightSibling; isSimple(a); a = a.rightSibling) R++
     try {
       if (L) left = mf.getValue(pos - L, pos, 'latex')
       if (R) right = mf.getValue(pos, pos + R, 'latex')
