@@ -1372,31 +1372,35 @@ li.paper,
   }
 }
 
-/* ═══ v14: 깜빡이는 커서(|)와 ↵ 기호가 겹치지 않게 — Word처럼 [커서][↵] 나란히 ═══
- * 빈 줄은 커서 자리용 <br>이 있어서 기호를 흐름 안(inline)에 두면 <br> 뒤 = 다음 줄로 밀려 줄 높이가 두 배가 됨
- * → 기호는 절대 위치를 유지하되, 커서가 그려지는 지점(왼쪽 정렬: 줄 맨 앞 / 가운데: 정중앙 / 오른쪽: 줄 끝)
- *   바로 오른쪽 3px에서 시작하도록 고정 (커서 두께 1~2px + 간격 1~2px) */
+/* ═══ v14: 줄바꿈 기호(↵)를 마지막 글자 · 깜빡이는 커서(|)에 빈틈없이 — Word처럼 [글자/커서][↵] ═══
+ * - 글자가 있는 줄 끝: 기호가 흐름 안(inline-block)에서 마지막 글자 바로 다음 픽셀에 (좌측 여백 0)
+ * - 빈 줄: 커서 자리용 <br> 때문에 기호를 흐름 안에 두면 다음 줄로 밀리므로 절대 위치를 유지하되,
+ *   커서가 그려지는 지점(왼쪽: 줄 맨 앞 / 가운데: 정중앙 / 오른쪽: 줄 끝) + 커서 두께 1px에서 바로 시작 → 겹치지도 떨어지지도 않음 */
+.editor-content :is(p, h2, h3, h4)::after,
+.editor-content .hb-mark::before {
+  display: inline-block;
+  margin-left: 0;
+  padding-left: 0;
+  text-indent: 0;
+  letter-spacing: 0;
+  word-spacing: 0;
+}
 .editor-content :is(p, h2, h3, h4):has(> br.ProseMirror-trailingBreak:only-child)::after {
-  left: 3px;
+  left: 1px;
   right: auto;
   padding-left: 0;
   text-align: left;
   white-space: nowrap;
 }
 .editor-content :is(p, h2, h3, h4)[style*='text-align: center']:has(> br.ProseMirror-trailingBreak:only-child)::after {
-  left: calc(50% + 3px);
+  left: calc(50% + 1px);
   right: auto;
   padding-left: 0;
   text-align: left;
 }
 .editor-content :is(p, h2, h3, h4)[style*='text-align: right']:has(> br.ProseMirror-trailingBreak:only-child)::after {
-  left: calc(100% + 3px);
+  left: 100%; /* 줄 끝 커서는 경계 1px 왼쪽에 그려짐 */
   right: auto;
   padding-left: 0;
   text-align: left;
-}
-/* 글자가 있는 줄 끝: 기호가 마지막 글자에 딱 붙어 커서가 기호 왼쪽 가장자리를 관통하던 문제 → 3px 띄움 */
-.editor-content :is(p, h2, h3, h4)::after,
-.editor-content .hb-mark::before {
-  padding-left: 3px;
 }
