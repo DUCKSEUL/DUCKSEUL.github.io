@@ -45,7 +45,8 @@ export default function JournalPost() {
   const { isAdmin } = useAdmin()
   const [toc, setToc] = useState([])
   const [active, setActive] = useState(null)
-  const [tocOpen, setTocOpen] = useState(false)
+  const [tocOpen, setTocOpen] = useState(false) // 모바일 바텀 시트
+  const sideNavRef = useRef(null)
   useDocumentTitle(post ? `${post.title} · 연구 일지` : '연구 일지')
 
   const html = useMemo(
@@ -79,14 +80,38 @@ export default function JournalPost() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [toc])
 
+  // 목차가 길어 사이드 목차 안에서 스크롤될 때: 현재 항목이 보이도록 (창 스크롤은 건드리지 않음)
+  useEffect(() => {
+    const nav = sideNavRef.current
+    const item = nav?.querySelector('.is-active')
+    if (!nav || !item || nav.scrollHeight <= nav.clientHeight) return
+    const top = item.offsetTop - nav.offsetTop
+    if (top < nav.scrollTop + 24 || top > nav.scrollTop + nav.clientHeight - 48) nav.scrollTo({ top: top - nav.clientHeight / 3, behavior: 'smooth' })
+  }, [active])
+
+  // 바텀 시트: Esc로 닫기 · 열려 있는 동안 배경 스크롤 잠금
+  useEffect(() => {
+    if (!tocOpen) return
+    const onKey = (e) => e.key === 'Escape' && setTocOpen(false)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = prev
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [tocOpen])
+
   if (!post) return ready ? <NotFound /> : <div className="page" />
 
   const idx = posts.indexOf(post)
   const newer = posts[idx - 1]
   const older = posts[idx + 1]
 
+  const activeItem = toc.find((t) => t.id === active)
+
   const go = (secId) => {
-    // 접이식 목차를 먼저 닫아 레이아웃을 확정한 뒤 스크롤 (닫히면서 위치가 밀리지 않도록)
+    // 바텀 시트를 먼저 닫아(배경 스크롤 잠금 해제) 레이아웃을 확정한 뒤 부드럽게 스크롤
     flushSync(() => setTocOpen(false))
     document.getElementById(secId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
@@ -119,7 +144,7 @@ export default function JournalPost() {
   }
 
   return (
-    <article className="page journal">
+    <article className={`page journal ${toc.length ? 'has-toc' : ''}`}>
       <div className="journal-col post-col">
         <Link to="/journal" className="back-link">
           <Icon name="chevronLeft" size={18} /> 연구 일지 목록
@@ -162,25 +187,13 @@ export default function JournalPost() {
         </header>
 
         {toc.length > 0 && (
-          <>
-            {/* 넓은 화면: 본문 오른쪽 바깥 여백에 고정 목차 */}
-            <aside className="toc-side" aria-label="목차">
-              <nav>
-                <p className="toc-title">목차</p>
-                <TocList toc={toc} active={active} onGo={go} />
-              </nav>
-            </aside>
-            {/* 좁은 화면: 본문 상단 접이식 목차 */}
-            <div className={`toc-box ${tocOpen ? 'is-open' : ''}`}>
-              <button className="toc-toggle" onClick={() => setTocOpen((v) => !v)} aria-expanded={tocOpen}>
-                <span>
-                  <Icon name="menu" size={16} /> 목차 <em>{toc.length}</em>
-                </span>
-                <Icon name="chevronDown" size={18} />
-              </button>
-              {tocOpen && <TocList toc={toc} active={active} onGo={go} />}
-            </div>
-          </>
+          /* 데스크톱(1200px 이상): 본문 오른쪽 여백에 따라오는 목차 (현재 섹션 강조) */
+          <aside className="toc-side" aria-label="목차">
+            <nav ref={sideNavRef}>
+              <p className="toc-title">목차</p>
+              <TocList toc={toc} active={active} onGo={go} />
+            </nav>
+          </aside>
         )}
 
         {isAdmin && post.source === 'private' && (
@@ -231,6 +244,39 @@ export default function JournalPost() {
         </nav>
       </div>
 
+      {toc.length > 0 && (
+        <>
+          {/* 모바일·태블릿(1200px 미만): 오른쪽 아래 플로팅 알약 → 바텀 시트 목차 */}
+          <button
+            type="button"
+            className="toc-pill"
+            onClick={() => setTocOpen(true)}
+            aria-haspopup="dialog"
+            aria-expanded={tocOpen}
+            aria-label={`목차 열기${activeItem ? ` — 현재: ${activeItem.text}` : ''}`}
+          >
+            <Icon name="menu" size={16} />
+            <span className="toc-pill-label">목차</span>
+            {activeItem && <span className="toc-pill-cur">{activeItem.text}</span>}
+          </button>
+          {tocOpen && (
+            <div className="toc-sheet-wrap" role="presentation" onClick={() => setTocOpen(false)}>
+              <div className="toc-sheet" role="dialog" aria-modal="true" aria-label="목차" onClick={(e) => e.stopPropagation()}>
+                <div className="toc-sheet-grip" aria-hidden />
+                <div className="toc-sheet-head">
+                  <strong>
+                    목차 <em>{toc.length}</em>
+                  </strong>
+                  <button type="button" className="toc-sheet-close" onClick={() => setTocOpen(false)} aria-label="목차 닫기">
+                    <Icon name="close" size={20} />
+                  </button>
+                </div>
+                <TocList toc={toc} active={active} onGo={go} />
+              </div>
+            </div>
+          )}
+        </>
+      )}
       <BackToTop />
       <Lightbox
         items={lightbox?.items}

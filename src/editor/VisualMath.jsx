@@ -1,10 +1,11 @@
 // PowerPoint(Office Math)식 구조 수식 편집기 — MathLive <math-field>
 // - 본문에는 외곽 프레임 + 점선 빈 칸(⬚)만 있는 '순수 수식 입력창' (팔레트·버튼은 상단 [수식] 리본으로: MathRibbon.jsx)
-// - 실시간 조립: a/b → 분수, x^2 · S_11 → 첨자, '\mathrm{S}' · '\alpha' · '\pm' + Space → 기호/서체, Space = 현재 칸 밖으로
+// - Space 전용 조립: 'η_{zz}' · 'x^{2}' · 'a/b' · '\frac{a}{b}' · '\mathrm{S}' · '\pm'은 Space를 누르기 전까지 글자 그대로,
+//   Space를 누르는 순간에만 구조로 조립(커서는 구조 오른쪽 바깥) — 조립된 노드는 다시 코드로 풀리지 않음
 // - ← → ↑ ↓ / Tab으로 분자↔분모, 첨자↔본문, 행렬 칸 사이 이동 · Backspace는 구조 한 단계씩
 // - Enter · 바깥 클릭 → 표준 LaTeX로 확정(KaTeX 렌더링) / Esc → 확정 후 빠져나감
 import { useEffect, useRef, useState } from 'react'
-import { SHADOW_CSS, cleanLatex, loadMathLive, toMathLiveTemplate } from './mathLive.js'
+import { SHADOW_CSS, cleanLatex, linearToLatex, loadMathLive, toMathLiveTemplate } from './mathLive.js'
 import { isValidLatex } from './mathTools.js'
 import { clearMathRibbon, publishMathRibbon } from './mathRibbonStore.js'
 
@@ -33,6 +34,84 @@ function caretDepth(mf) {
   }
 }
 
+/* ── Space 전용 조립 (Strict Space-Only Build-up) ──
+ * '_' '^' '/' '\'를 치면 그 자리부터 '원문 칸'(MathLive LaTeX 모드: 친 글자가 그대로 보임)으로 들어가
+ * Space를 누르기 전까지는 'η_{zz}' · 'a/b' · '\frac{a}{b}'가 글자 그대로 남음
+ * Space → 원문 + (첨자·분수면) 바로 앞 노드를 묶어 PowerPoint 선형 형식으로 해석해 한 번에 조립, 커서는 구조 오른쪽 바깥 */
+const RAW_START = new Set(['_', '^', '/', '\\'])
+
+const rawText = (mf) => {
+  const g = mf._mathfield?.model?.atoms?.find((a) => a.type === 'latexgroup')
+  return g ? (g.body || []).filter((a) => a.type === 'latex' && !a.isSuggestion).map((a) => a.value).join('') : null
+}
+
+/** 원문 칸 시작: 첫 글자를 원문으로 */
+function startRaw(mf, ch) {
+  mf.executeCommand(['switchMode', 'latex'])
+  mf.executeCommand(['typedText', ch])
+}
+
+/** 바로 앞의 피연산자 원자 개수 — 연속된 영문/숫자 한 글자 원자는 한 덩어리('ab/c' → \frac{ab}{c}), 그 밖에는 원자 1개 */
+function operandSize(mf) {
+  const model = mf._mathfield?.model
+  if (!model) return 0
+  let a = model.at(model.position)
+  if (!a || a.type === 'first') return 0
+  const simple = (x) => x && x.type === 'mord' && typeof x.value === 'string' && /^[A-Za-z0-9.]$/.test(x.value) && !x.subscript && !x.superscript
+  if (!simple(a)) return 1
+  let n = 0
+  while (simple(a)) {
+    n++
+    a = a.leftSibling
+  }
+  return n
+}
+
+/** 원문 칸 조립: true = 조립함 */
+function flushRaw(mf) {
+  if (mf.mode !== 'latex') return false
+  const raw = rawText(mf)
+  mf.executeCommand(['complete', 'reject']) // 원문 칸 제거 (조립은 아래에서 직접)
+  if (!raw) return true
+  let prev = ''
+  if (/^[_^/]/.test(raw)) {
+    const n = operandSize(mf)
+    for (let k = 0; k < n; k++) mf.executeCommand('extendSelectionBackward')
+    if (n) prev = mf.getValue(mf.selection, 'latex')
+  }
+  const tex = linearToLatex(prev + raw)
+  mf.insert(tex, { format: 'latex', selectionMode: /\{\}|#\?|\\placeholder/.test(tex) ? 'placeholder' : 'after', focus: true })
+  return true
+}
+
+/**
+ * 글자 하나 처리 — true면 여기서 처리함(기본 동작 막기), false면 MathLive 기본 입력
+ * - 원문 칸 안: Space = 조립, 나머지 글자는 그대로 원문에 쌓임
+ * - 수식 칸: '_' '^' '/' '\' = 원문 칸 시작 / '{' 무시 · '}' = 현재 칸 밖으로 /
+ *   Space = 칸 안이면 밖으로, 맨 바깥이면 아무것도 안 함(상자가 닫히지 않게)
+ */
+function typeChar(mf, ch) {
+  if (mf.mode === 'latex') {
+    if (ch === '}') {
+      // MathLive는 '\frac{1}{2}'처럼 필수 인자의 '}'가 닫히는 순간 바로 조립함 → 글자로만 넣고 Space를 기다림
+      mf.insert('}', { format: 'plain-text' })
+      return true
+    }
+    if (ch !== ' ') return false
+    flushRaw(mf)
+    return true
+  }
+  if (RAW_START.has(ch)) {
+    startRaw(mf, ch)
+    return true
+  }
+  if (ch === '{' || ch === '}' || ch === ' ') {
+    if (ch !== '{' && caretDepth(mf) > 0) mf.executeCommand('moveAfterParent')
+    return true
+  }
+  return false
+}
+
 export default function VisualMath({ latex, display, enterSide, apiRef, onCommit, onRaw }) {
   const boxRef = useRef(null)
   const hostRef = useRef(null)
@@ -43,7 +122,11 @@ export default function VisualMath({ latex, display, enterSide, apiRef, onCommit
   const [error, setError] = useState(null)
   const [matrixEnv, setMatrixEnv] = useState(null)
 
-  const current = () => cleanLatex(mfRef.current?.getValue('latex') ?? latex)
+  const current = () => {
+    const mf = mfRef.current
+    if (mf && mf.mode === 'latex') flushRaw(mf) // 원문 칸이 남아 있으면 조립한 뒤 읽기 (Enter · 바깥 클릭 · 리본)
+    return cleanLatex(mf?.getValue('latex') ?? latex)
+  }
   if (apiRef) apiRef.current = { get: current }
 
   /** move: 'after' | 'before' | 'up' | 'down' | null(바깥 클릭 — 커서 그대로) */
@@ -73,6 +156,7 @@ export default function VisualMath({ latex, display, enterSide, apiRef, onCommit
     const mf = mfRef.current
     if (!mf) return
     mf.focus()
+    flushRaw(mf)
     mf.insert(item.ml || toMathLiveTemplate(item.ins), { format: 'latex', selectionMode: 'placeholder', focus: true })
     setError(null)
     setMatrixEnv(matrixEnvAtCaret(mf))
@@ -134,6 +218,9 @@ export default function VisualMath({ latex, display, enterSide, apiRef, onCommit
       mf.onInsertStyle = () => ({})
       mf.className = 'ml-field'
       hostRef.current.appendChild(mf)
+      // 키 하나 칠 때마다 바뀌는 자동 변환 끄기: 'pi' → π · 'sqrt' 같은 인라인 단축어, 위첨자 숫자 자동 탈출 (마운트 뒤에만 설정 가능)
+      mf.inlineShortcuts = {}
+      mf.smartSuperscript = false
       mf.value = latex
       if (mf.shadowRoot && !mf.shadowRoot.querySelector('style[data-dk]')) {
         const st = document.createElement('style')
@@ -146,13 +233,16 @@ export default function VisualMath({ latex, display, enterSide, apiRef, onCommit
       const onKey = (e) => {
         if (e.isComposing) return
         const plain = !e.altKey && !e.ctrlKey && !e.metaKey
-        // PowerPoint식 선형 입력 보정 (LaTeX 명령 입력 중('\…')에는 MathLive 기본 동작 그대로)
-        //  - '{' '}': 묶음은 칸 구조가 대신하므로 글자 괄호로 넣지 않음 → '_{12}' = '_12', '}' = 현재 칸 밖으로
-        //  - Space: 첨자·분모 등 칸 안이면 그 칸 밖으로(조립된 노드는 그대로 유지), 맨 바깥이면 아무것도 안 함(상자가 닫히지 않게)
-        if (plain && mf.mode !== 'latex' && (e.key === '{' || e.key === '}' || e.key === ' ')) {
+        if (plain && e.key.length === 1 && typeChar(mf, e.key)) {
           e.preventDefault()
           e.stopPropagation()
-          if (e.key !== '{' && caretDepth(mf) > 0) mf.executeCommand('moveAfterParent')
+          return
+        }
+        // 원문 칸에서 방향키 · Tab → 먼저 조립하고 커서는 구조 오른쪽 바깥에
+        if (mf.mode === 'latex' && /^(Arrow(Left|Right|Up|Down)|Tab)$/.test(e.key)) {
+          e.preventDefault()
+          e.stopPropagation()
+          flushRaw(mf)
           return
         }
         if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
@@ -192,21 +282,8 @@ export default function VisualMath({ latex, display, enterSide, apiRef, onCommit
       mf.focus({ preventScroll: true })
       mf.executeCommand(enterSide === 'start' ? 'moveToMathfieldStart' : 'moveToMathfieldEnd')
       window.removeEventListener('keydown', buffer, true)
-      // 모아 둔 글자를 실제로 친 것처럼 재생: '\' → LaTeX 명령 입력, Space → 명령 완료(또는 현재 칸 밖으로)
-      let inLatex = false
-      for (const ch of queue) {
-        if (ch === '\\' && !inLatex) {
-          mf.executeCommand(['switchMode', 'latex'])
-          mf.executeCommand(['typedText', '\\'])
-          inLatex = true
-        } else if (ch === ' ') {
-          if (inLatex) mf.executeCommand('complete')
-          else if (caretDepth(mf) > 0) mf.executeCommand('moveAfterParent')
-          inLatex = false
-        } else if (!inLatex && (ch === '{' || ch === '}')) {
-          if (ch === '}' && caretDepth(mf) > 0) mf.executeCommand('moveAfterParent')
-        } else mf.executeCommand(['typedText', ch])
-      }
+      // 모아 둔 글자를 실제로 친 것처럼 재생 (키 입력과 같은 규칙)
+      for (const ch of queue) if (!typeChar(mf, ch)) mf.executeCommand(['typedText', ch])
       onSel()
     })
     return () => {

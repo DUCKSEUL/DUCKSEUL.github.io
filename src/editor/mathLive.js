@@ -49,3 +49,106 @@ export function toMathLiveTemplate(ins) {
 /** r×c 행렬 템플릿 (모든 원소가 빈 칸) */
 export const matrixTemplate = (env, r, c) =>
   `\\begin{${env}} ${Array.from({ length: r }, () => Array(c).fill('#?').join(' & ')).join(' \\\\ ')} \\end{${env}}`
+
+/**
+ * PowerPoint 선형 형식 → LaTeX (Space를 누른 순간 한 덩어리를 조립할 때)
+ * - 'a/b' → \frac{a}{b}, '(a+b)/c' → \frac{a+b}{c} (괄호 묶음은 벗김), '\eta_zz' · 'x^12' → 첨자 묶음 {zz} {12}
+ * - '\frac{a}{b}', '\sqrt{x}', '\mathrm{S}' 같은 LaTeX는 그대로
+ */
+export function linearToLatex(s = '') {
+  let i = 0
+  const units = [] // { tex, wrap: '{' | '(' | null, scripted } | { op: '/' } | { raw }
+  const readGroup = (open, close) => {
+    let d = 0
+    let j = i
+    for (; j < s.length; j++) {
+      if (s[j] === '\\') {
+        j++
+        continue
+      }
+      if (s[j] === open) d++
+      else if (s[j] === close && --d === 0) break
+    }
+    const g = s.slice(i, j + 1)
+    i = j + 1
+    return g
+  }
+  const readScriptArg = () => {
+    if (s[i] === '{') return readGroup('{', '}')
+    if (s[i] === '(') return `{${readGroup('(', ')').slice(1, -1)}}`
+    const cmd = /^\\(?:[a-zA-Z]+|.)/.exec(s.slice(i))
+    if (cmd) {
+      i += cmd[0].length
+      return `{${cmd[0]}}`
+    }
+    const run = /^[A-Za-z0-9.]+/.exec(s.slice(i))
+    if (run) {
+      i += run[0].length
+      return `{${run[0]}}`
+    }
+    if (i < s.length) return `{${s[i++]}}`
+    return '{}'
+  }
+  while (i < s.length) {
+    const c = s[i]
+    if (c === '/') {
+      units.push({ op: '/' })
+      i++
+      continue
+    }
+    if (c === ' ') {
+      i++
+      continue
+    }
+    let tex
+    let wrap = null
+    if (c === '{') {
+      tex = readGroup('{', '}')
+      wrap = '{'
+    } else if (c === '(') {
+      tex = readGroup('(', ')')
+      wrap = '('
+    } else if (c === '\\') {
+      const m = /^\\(?:[a-zA-Z]+|.)/.exec(s.slice(i))
+      tex = m[0]
+      i += tex.length
+      if (/^\\[a-zA-Z]+$/.test(tex)) {
+        while (s[i] === '[') tex += readGroup('[', ']')
+        while (s[i] === '{') tex += readGroup('{', '}')
+      }
+    } else if (/[A-Za-z0-9.]/.test(c)) {
+      tex = /^[A-Za-z0-9.]+/.exec(s.slice(i))[0]
+      i += tex.length
+    } else if (c === '_' || c === '^') {
+      tex = ''
+    } else {
+      units.push({ raw: c })
+      i++
+      continue
+    }
+    let scripted = false
+    while (s[i] === '_' || s[i] === '^') {
+      tex += s[i++] + readScriptArg()
+      scripted = true
+    }
+    units.push({ tex, wrap, scripted })
+  }
+  const strip = (u) => (!u ? '' : !u.scripted && u.wrap ? u.tex.slice(1, -1) : u.tex)
+  const out = []
+  for (let k = 0; k < units.length; k++) {
+    const u = units[k]
+    if (!u.op) {
+      out.push(u)
+      continue
+    }
+    let num = out.pop()
+    if (num && num.tex === undefined) {
+      out.push(num)
+      num = null
+    }
+    const next = units[k + 1]
+    const den = next && next.tex !== undefined ? units[++k] : null
+    out.push({ tex: `\\frac{${strip(num)}}{${strip(den)}}` })
+  }
+  return out.map((u) => u.raw ?? u.tex).join('')
+}
