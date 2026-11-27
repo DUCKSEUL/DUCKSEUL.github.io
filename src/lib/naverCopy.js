@@ -29,7 +29,12 @@ function katexFontCSS() {
           continue
         }
         for (const r of list) {
-          if (r instanceof CSSFontFaceRule && /KaTeX/.test(r.style.getPropertyValue('font-family'))) rules.push(r)
+          // KaTeX 기호 폰트 + 수식 본문 폰트(STIX Two Text)
+          if (!(r instanceof CSSFontFaceRule)) continue
+          const fam = r.style.getPropertyValue('font-family')
+          // STIX는 수식에 쓰는 라틴·그리스 문자 부분 글꼴만 (용량 절약)
+          const range = r.style.getPropertyValue('unicode-range')
+          if (/KaTeX/.test(fam) || (/STIX Two Text/.test(fam) && (!range || /U\+0+(-|,|$)|U\+0+-0*FF|U\+0?370/i.test(range)))) rules.push(r)
         }
       }
       const parts = await Promise.all(
@@ -42,7 +47,8 @@ function katexFontCSS() {
               ? m[1]
               : await blobToDataUrl(await (await fetch(new URL(m[1], r.parentStyleSheet?.href || location.href).href)).blob())
             const st = r.style
-            return `@font-face{font-family:${st.getPropertyValue('font-family')};font-style:${st.getPropertyValue('font-style') || 'normal'};font-weight:${st.getPropertyValue('font-weight') || 'normal'};src:url(${data}) format("woff2");}`
+            const range = st.getPropertyValue('unicode-range')
+            return `@font-face{font-family:${st.getPropertyValue('font-family')};font-style:${st.getPropertyValue('font-style') || 'normal'};font-weight:${st.getPropertyValue('font-weight') || 'normal'};${range ? `unicode-range:${range};` : ''}src:url(${data}) format("woff2");}`
           } catch {
             return ''
           }

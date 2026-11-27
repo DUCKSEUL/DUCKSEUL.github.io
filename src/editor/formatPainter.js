@@ -1,11 +1,11 @@
 // 한글(HWP) 방식 '모양 복사' (Alt+C / ⌥C)
 // - 선택 없음(커서만): 커서 위치의 서식 8가지를 복사
-//   글꼴 · 크기 · 굵게 · 기울임 · 밑줄 · 취소선 · 글자색 · 배경색(형광펜)
+//   크기 · 굵게 · 기울임 · 밑줄 · 취소선 · 글자색 · 배경색(형광펜) (글꼴은 전역 통일 — Pretendard)
 // - 선택 있음: 복사해 둔 서식을 선택 범위 전체에 한 번에 적용 (복사본이 없으면 선택 시작점 서식을 복사)
 //   원본에서 꺼져 있던 속성(굵게 아님 · 배경 없음 등)도 그대로 덮어써서 기존 서식을 해제 → 원본 100% 복제
-// 적용은 기존 툴바와 같은 마크(<strong>/<em>/<u>/<s>, <span style="font-family; font-size; color; background-color">)라
+// 적용은 기존 툴바와 같은 마크(<strong>/<em>/<u>/<s>, <span style="font-size; color; background-color">)라
 // 뷰어·다크 모드·네이버 복사에서도 그대로 유지
-import { DEFAULT_SIZE, FONT_FAMILIES } from './extensions.js'
+import { DEFAULT_SIZE } from './extensions.js'
 
 const pxToPt = (px) => Math.round(parseFloat(px) * 0.75) // 1pt 단위 (툴바 크기 표기와 맞춤)
 
@@ -63,7 +63,6 @@ export function readFormat(editor, { caret = true } = {}) {
     if (pt && pt !== parseFloat(DEFAULT_SIZE)) fontSize = `${pt}pt` // 기본 크기와 다를 때만 명시
   }
   return {
-    fontFamily: ts.fontFamily || null,
     fontSize,
     bold: has('bold') || (cs ? parseInt(cs.fontWeight, 10) >= 600 : false),
     italic: has('italic') || cs?.fontStyle === 'italic',
@@ -84,11 +83,10 @@ const STYLE_LABELS = [
   ['backgroundColor', '배경색'],
 ]
 
-/** 토스트 문구: "글꼴 · 크기 · 스타일" */
+/** 토스트 문구: "크기 · 스타일" (글꼴은 전역 통일이라 표시하지 않음) */
 export function describeFormat(f) {
-  const font = FONT_FAMILIES.find((o) => o.value && o.value === f.fontFamily)?.label || (f.fontFamily ? f.fontFamily.split(',')[0].replace(/['"]/g, '') : '기본 글꼴')
   const styles = STYLE_LABELS.filter(([k]) => f[k]).map(([, label]) => label)
-  return `${font} · ${f.fontSize || DEFAULT_SIZE} · ${styles.length ? styles.join('+') : '기본 스타일'}`
+  return `${f.fontSize || DEFAULT_SIZE} · ${styles.length ? styles.join('+') : '기본 스타일'}`
 }
 
 /**
@@ -99,7 +97,6 @@ export function applyFormat(editor, f) {
   const toggle = (chain, on, set, unset) => (on ? chain[set]() : chain[unset]())
   let chain = editor.chain().focus()
   chain = chain.setMark('textStyle', {
-    fontFamily: f.fontFamily,
     fontSize: f.fontSize,
     color: f.color,
     backgroundColor: f.backgroundColor,

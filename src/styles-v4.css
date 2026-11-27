@@ -1563,3 +1563,15 @@ li.paper,
 .math-pal-icon .katex {
   font-size: 1.15em;
 }
+
+/* ═══ v16: 가운데 정렬 줄이 ↵ 기호 폭만큼 왼쪽으로 밀리던 문제 → 기호를 폭 0으로(Zero-Width Overlay) ═══
+ * 기호는 가로 폭 계산·정렬 중심에서 빠지고(width: 0), 마지막 글자 바로 오른쪽에 넘쳐서(overflow: visible) 그려짐
+ * → Enter 전후로 문장 위치가 1px도 바뀌지 않음. 빈 줄은 v14 규칙(커서 + 1px 지점 절대 위치) 그대로 */
+.editor-content :is(p, h2, h3, h4)::after,
+.editor-content .hb-mark::before {
+  display: inline-block;
+  width: 0;
+  overflow: visible;
+  white-space: nowrap;
+  vertical-align: baseline;
+}

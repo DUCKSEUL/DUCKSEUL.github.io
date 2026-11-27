@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../components/ui.jsx'
-import { DEFAULT_LINE_HEIGHT, DEFAULT_SIZE, DIVIDERS, FONT_FAMILIES, FONT_SIZES, LINE_HEIGHTS, insertDividerKeepAlign } from './extensions.js'
+import { DEFAULT_LINE_HEIGHT, DEFAULT_SIZE, DIVIDERS, FONT_SIZES, LINE_HEIGHTS, insertDividerKeepAlign } from './extensions.js'
 
 const COLORS = [
   '#000000', '#333d4b', '#6b7684', '#b0b8c1', '#ffffff',
@@ -233,18 +233,6 @@ export default function Toolbar({ editor, onMath, onLink, onImage }) {
           <option value="h2">소제목 1</option>
           <option value="h3">소제목 2</option>
           <option value="h4">소제목 3</option>
-        </select>
-        <select
-          className="tb-select wide"
-          aria-label="글씨 모양"
-          value={FONT_FAMILIES.find((f) => f.value && f.value === ts.fontFamily)?.value || ''}
-          onChange={(e) => (e.target.value ? c().setFontFamily(e.target.value).run() : c().unsetFontFamily().run())}
-        >
-          {FONT_FAMILIES.map((f) => (
-            <option key={f.label} value={f.value} style={{ fontFamily: f.value || 'inherit' }}>
-              {f.label}
-            </option>
-          ))}
         </select>
         <div className="tb-size">
           <select

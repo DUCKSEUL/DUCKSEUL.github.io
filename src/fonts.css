@@ -1,0 +1,51 @@
+/* ═══ 전역 폰트 통일: 본문·UI = Pretendard Variable / 수식 = STIX Two Text ═══
+ * 웹폰트는 index.html에서 로드 (Pretendard: jsDelivr, STIX Two Text: Google Fonts)
+ * - :where()로 감싸 우선순위(specificity)를 0으로 → 코드·수식 입력 상자 등 고정폭 글꼴을 지정한 기존 규칙은 그대로 유지
+ * - 수식(KaTeX/MathJax/MathML) · 코드(pre/code/kbd/samp) · 아이콘 폰트와 그 내부는 제외
+ * - '네이버 블로그용 복사'는 붙여넣을 HTML에 별도의 인라인 표준 글꼴(naverCopy.js)을 쓰므로 영향 없음 */
+:root {
+  --font-ui: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI',
+    'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+  --font-math: 'STIX Two Text', 'Times New Roman', 'KaTeX_Main', Times, serif;
+}
+
+body {
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:where(body, p, h1, h2, h3, h4, h5, h6, span, a, li, dt, dd, button, input, textarea, select, label, th, td, blockquote, figcaption, div):where(
+    :not(
+        .katex, .katex *, .MathJax, .MathJax *, mjx-container, mjx-container *, math, math *,
+        pre, pre *, code, code *, kbd, kbd *, samp, samp *,
+        .gs-mono *, .kw-chip *, .spec-cem *, .math-input, .math-error, .math-box-input,
+        .material-icons, .material-icons *, [class*='material-symbols'], [class*='material-symbols'] *, [class*='fa-'], [class*='icon-'], i
+      )
+  ) {
+  font-family: var(--font-ui);
+}
+
+/* 예전 글에 남아 있는 인라인 글꼴(나눔고딕·나눔명조 등)도 통일 폰트로 — 상세 보기 · 에디터 본문 */
+:is(.prose, .editor-content) [style*='font-family']:not(.katex, .katex *, pre, pre *, code, code *) {
+  font-family: var(--font-ui) !important;
+}
+
+/* 수식: IEEE 논문 스타일 (KaTeX 기호 전용 폰트 — 큰 연산자·괄호·Size 폰트 등 — 는 그대로) */
+:root .katex .mord.text,
+:root .katex .mathrm,
+:root .katex .mathnormal,
+:root .katex .mathit,
+:root .katex .mathbf,
+:root .MathJax,
+:root mjx-container,
+:root math {
+  font-family: var(--font-math);
+}
+:root .katex .mathnormal,
+:root .katex .mathit {
+  font-style: italic;
+}
+:root .katex .mathbf {
+  font-weight: 700;
+}

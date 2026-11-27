@@ -8,6 +8,7 @@ import './index.css'
 import './styles-v2.css'
 import './styles-v3.css'
 import './styles-v4.css'
+import './fonts.css'
 
 // 데이터 라우터: 글쓰기 중 이탈 확인(useBlocker)에 필요. 실제 경로는 App의 <Routes>에서 처리
 const router = createBrowserRouter([{ path: '*', element: <App /> }])

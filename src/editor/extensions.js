@@ -498,14 +498,6 @@ export const LineHeight = Extension.create({
   },
 })
 
-export const FONT_FAMILIES = [
-  { label: '기본 글꼴', value: '' },
-  { label: '나눔고딕', value: "'Nanum Gothic', sans-serif" },
-  { label: '나눔명조', value: "'Nanum Myeongjo', serif" },
-  { label: 'Consolas', value: 'Consolas, Cousine, monospace' },
-  { label: 'Times New Roman', value: "'Times New Roman', Tinos, serif" },
-]
-
 export const FONT_SIZES = ['10pt', '11pt', '12pt', '13pt', '14pt', '15pt', '16pt', '18pt', '20pt', '24pt', '28pt', '30pt', '36pt']
 export const DEFAULT_SIZE = '12pt'
 
@@ -573,7 +565,7 @@ export function buildExtensions() {
       hardBreak: false, // ↵ 표시용 MarkedHardBreak로 대체
       link: { openOnClick: false, autolink: true, defaultProtocol: 'https' },
     }),
-    TextStyleKit.configure({ lineHeight: false }),
+    TextStyleKit.configure({ lineHeight: false, fontFamily: false }), // 글꼴은 전역 통일(Pretendard) — 개별 글꼴 지정 없음
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
     LineHeight,
     MarkedHardBreak,
