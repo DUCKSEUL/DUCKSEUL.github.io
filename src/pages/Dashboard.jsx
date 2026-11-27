@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon, useDocumentTitle } from '../components/ui.jsx'
-import { usePosts, formatDateTime, postThumb } from '../lib/store.js'
+import { usePosts, formatDateTime, postThumb, sortForList } from '../lib/store.js'
 import { useAdmin } from '../lib/admin.js'
 import { useSiteData } from '../lib/siteData.js'
 import { useEvents, eventsOn } from '../lib/useEvents.js'
@@ -197,7 +197,8 @@ function CalendarWidget() {
 function JournalWidget() {
   const { isAdmin } = useAdmin()
   const { posts } = usePosts()
-  const latest = posts.filter((p) => !p.draft || p.source === 'modified').slice(0, 4)
+  // 연구 일지 탭과 같은 정렬(연구 노트는 제목 앞 날짜 코드 최신순) 뒤 앞의 4개
+  const latest = sortForList(posts.filter((p) => !p.draft || p.source === 'modified')).slice(0, 4)
   return (
     <Widget area="journal" title="최근 연구 일지" icon="book" to="/journal">
       {latest.length ? (

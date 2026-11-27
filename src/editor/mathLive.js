@@ -24,6 +24,16 @@ export const SHADOW_CSS = `
   .ML__text { font-family: 'STIX Two Text', 'Times New Roman', serif; }
   .ML__content { padding: 0 1px; min-height: 0; }
   :host, .ML__container { min-height: 0 !important; padding: 0 !important; }
+  /* 수식 칸 안 커서: 기본(0.76em)은 글자·괄호보다 짧아 잘 안 보임 → 1.4em(최소 20px) · 두께 2px로 또렷하게.
+     위아래 음수 여백으로 줄 높이는 그대로 (수식 상자 안에서만 적용 — 본문 커서와 무관) */
+  .ML__caret::after, .ML__text-caret::after {
+    height: max(1.4em, 20px) !important;
+    vertical-align: -0.34em !important;
+    margin-block: -0.2em !important;
+    --_caret-width: 2px !important;
+    border-right-width: 2px !important;
+    border-radius: 1px;
+  }
 `
 
 /** MathLive 출력 LaTeX → 저장용 표준 LaTeX (빈 칸 자리표시는 빈 그룹으로) */

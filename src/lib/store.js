@@ -341,3 +341,15 @@ export function isPubliclyListed(id) {
   if (local.some((p) => p.id === id && p.deleted)) return false
   return isOnRemote(id)
 }
+
+const NOTE_CAT = '연구 노트'
+const byTitleDesc = (a, b) => (b.title || '').localeCompare(a.title || '', undefined, { numeric: true, sensitivity: 'base' })
+
+/** 연구 일지 목록 정렬 (연구 일지 탭 · 홈 '최근 연구 일지' 공통)
+ *  - 「연구 노트」 글은 제목 앞 날짜 코드(261127 > 261125 > 261123 …) 기준 내림차순
+ *  - 다른 카테고리 글은 작성일 순서(최신순) 그대로 두고, 연구 노트가 차지하던 자리끼리만 다시 채움 */
+export function sortForList(list, catOf = (p) => p.category || NOTE_CAT) {
+  const notes = list.filter((p) => catOf(p) === NOTE_CAT).sort(byTitleDesc)
+  let i = 0
+  return list.map((p) => (catOf(p) === NOTE_CAT ? notes[i++] : p))
+}

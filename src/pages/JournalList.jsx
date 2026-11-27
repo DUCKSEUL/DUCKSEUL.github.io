@@ -5,7 +5,7 @@ import PostListItem from '../components/PostListItem.jsx'
 import Modal from '../components/Modal.jsx'
 import BackToTop from '../components/BackToTop.jsx'
 import PrivateRepoPanel from '../components/PrivateRepoPanel.jsx'
-import { usePosts, importPosts, getPendingChanges, markSynced, postText } from '../lib/store.js'
+import { usePosts, importPosts, getPendingChanges, markSynced, postText, sortForList } from '../lib/store.js'
 import { removePost, deleteMessage } from '../lib/removePost.js'
 import { useAdmin } from '../lib/admin.js'
 import { profile } from '../data/profile.js'
@@ -14,16 +14,6 @@ import { JOURNAL_CATS as DEFAULT_CATS } from '../lib/labels.js'
 const ALL = '전체'
 const PAGE_SIZE = 10
 const NOTE_CAT = '연구 노트'
-const byTitleDesc = (a, b) => (b.title || '').localeCompare(a.title || '', undefined, { numeric: true, sensitivity: 'base' })
-
-/** 「연구 노트」 글은 제목 앞 날짜 코드(260922 …) 기준 내림차순.
- *  다른 카테고리 글은 작성일 순서 그대로 두고, 연구 노트가 차지하던 자리끼리만 다시 채움 */
-function sortForList(list, catOf) {
-  const notes = list.filter((p) => catOf(p) === NOTE_CAT).sort(byTitleDesc)
-  let i = 0
-  return list.map((p) => (catOf(p) === NOTE_CAT ? notes[i++] : p))
-}
-
 /** 1 2 3 4 … 10 형태의 페이지 번호 목록 */
 function pageItems(cur, total) {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
