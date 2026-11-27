@@ -1575,3 +1575,194 @@ li.paper,
   white-space: nowrap;
   vertical-align: baseline;
 }
+
+/* ═══ v17: 행렬 수식 선택 표시 · PowerPoint 스타일 행렬 편집기 (편집 화면 전용) ═══ */
+.editor-content .math-node .math-render.is-picked {
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px var(--math-border);
+  background: color-mix(in srgb, var(--math-border) 8%, transparent);
+}
+.editor-content .math-node {
+  position: relative;
+}
+.math-pick-hint {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 5;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--math-pal-bg);
+  box-shadow: 0 0 0 1px var(--math-pal-line), 0 4px 12px rgba(15, 23, 42, 0.12);
+  color: var(--math-pal-text);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.mx-editor {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 34px 2px 4px; /* 위쪽 미니 바 자리 */
+  padding: 6px 8px;
+  border: 1.5px solid var(--math-border);
+  border-radius: 8px;
+  background: var(--math-bg);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--math-border) 14%, transparent);
+  color: var(--math-ink);
+  vertical-align: middle;
+  line-height: 1.4;
+}
+.mx-editor.has-error {
+  border-color: #ef4444;
+}
+.mx-editor.is-block {
+  display: flex;
+  justify-content: center;
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
+}
+.mx-bar {
+  position: absolute;
+  left: -1.5px;
+  bottom: calc(100% + 6px);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--math-pal-bg);
+  box-shadow: 0 0 0 1px var(--math-pal-line), 0 6px 18px rgba(15, 23, 42, 0.12);
+  white-space: nowrap;
+  user-select: none;
+}
+.mx-bar button {
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--math-pal-text);
+  font: 600 12px/1 var(--font-ui, system-ui);
+  cursor: pointer;
+}
+.mx-bar button:hover:not(:disabled) {
+  background: var(--math-pal-btn-hover);
+  color: var(--math-border);
+}
+.mx-bar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.mx-bar button.is-on {
+  background: var(--math-border);
+  color: #fff;
+}
+.mx-bar .mx-done {
+  color: var(--math-border);
+}
+.mx-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 3px;
+  background: var(--math-pal-line);
+}
+.mx-cell,
+.mx-side {
+  box-sizing: content-box; /* 너비(ch)는 글자 영역만 — 짧은 원소도 잘리지 않게 */
+  min-width: 2ch;
+  max-width: 46ch;
+  height: 1.7em;
+  padding: 0 4px;
+  border: 1px dashed color-mix(in srgb, var(--math-border) 55%, transparent);
+  border-radius: 4px;
+  outline: none;
+  background: transparent;
+  color: var(--math-ink);
+  caret-color: var(--math-caret) !important;
+  font: 500 0.86em/1 'JetBrains Mono', 'D2Coding', Consolas, monospace;
+  text-align: center;
+}
+.mx-side {
+  text-align: left;
+}
+.mx-side:placeholder-shown {
+  width: 3ch !important;
+  opacity: 0.6;
+}
+.mx-cell:focus,
+.mx-side:focus {
+  border-style: solid;
+  border-color: var(--math-border);
+  background: color-mix(in srgb, var(--math-border) 10%, transparent);
+}
+/* 행렬 괄호 모양: [ ] · ( ) · | | */
+.mx-mat {
+  position: relative;
+  display: inline-grid;
+  gap: 4px 8px;
+  padding: 4px 12px;
+}
+.mx-mat::before,
+.mx-mat::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  border: 1.6px solid currentColor;
+}
+.mx-mat::before {
+  left: 0;
+  border-right: 0;
+}
+.mx-mat::after {
+  right: 0;
+  border-left: 0;
+}
+.mx-mat.is-pmatrix::before,
+.mx-mat.is-pmatrix::after,
+.mx-mat.is-Bmatrix::before,
+.mx-mat.is-Bmatrix::after {
+  width: 8px;
+  border-top-color: transparent;
+  border-bottom-color: transparent;
+}
+.mx-mat.is-pmatrix::before,
+.mx-mat.is-Bmatrix::before {
+  border-radius: 100% 0 0 100% / 50% 0 0 50%;
+}
+.mx-mat.is-pmatrix::after,
+.mx-mat.is-Bmatrix::after {
+  border-radius: 0 100% 100% 0 / 0 50% 50% 0;
+}
+.mx-mat.is-vmatrix::before,
+.mx-mat.is-vmatrix::after {
+  width: 0;
+  border-top: 0;
+  border-bottom: 0;
+}
+.mx-mat.is-Vmatrix::before,
+.mx-mat.is-Vmatrix::after {
+  width: 3px;
+  border-top: 0;
+  border-bottom: 0;
+  border-style: double;
+  border-width: 0 4px;
+}
+.mx-mat.is-matrix::before,
+.mx-mat.is-matrix::after {
+  display: none;
+}
+.mx-error {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  color: #ef4444;
+  font-size: 11px;
+  white-space: nowrap;
+}

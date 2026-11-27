@@ -9,8 +9,10 @@ import HardBreak from '@tiptap/extension-hard-break'
 import { TableKit, TableCell, TableHeader } from '@tiptap/extension-table'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Plugin, PluginKey, NodeSelection, TextSelection } from '@tiptap/pm/state'
+import { Fragment, Slice } from '@tiptap/pm/model'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import MathView from './MathView.jsx'
+import { DOLLAR_PASTE_RE, acceptDollarMath } from './mathTools.js'
 
 /* ── 수식 (인라인 / 블록) ───────────────────── */
 function mathNode(name, inline) {
@@ -87,6 +89,111 @@ export const MathNav = Extension.create({
   },
 })
 export const MathBlock = mathNode('mathBlock', false)
+
+/**
+ * 본문 '$ … $' → 인라인 수식 자동 변환 (Alt+3 없이)
+ * - 닫는 '$'를 치는 순간: 같은 문단에서 짝이 되는 여는 '$'까지를 수식 노드로 바꾸고 커서는 수식 바로 오른쪽
+ *   (강제 줄바꿈은 공백으로 취급, 사진·수식 같은 다른 노드를 사이에 끼고는 변환하지 않음)
+ * - 여는 '$' 뒤에서 입력하는 동안은 굵게/기울임 같은 마크다운 자동 변환이 수식 문법(*, _)을 망가뜨리지 않게 글자를 그대로 넣음
+ * - 붙여넣기: 텍스트 안의 '$ … $' 구간을 수식 노드로
+ * - 금액($100 …), \$, 앞뒤에 $·영숫자가 붙은 경우, KaTeX가 해석하지 못하는 내용은 그대로 둠
+ */
+const OBJ = '￼'
+function textBeforeWithMap($from) {
+  const parent = $from.parent
+  const start = $from.start()
+  let text = ''
+  const map = [] // text 인덱스 → 문서 위치
+  parent.forEach((child, offset) => {
+    if (offset >= $from.parentOffset) return
+    const pos = start + offset
+    if (child.isText) {
+      const t = child.text.slice(0, Math.max(0, $from.parentOffset - offset))
+      for (let i = 0; i < t.length; i++) map.push(pos + i)
+      text += t
+    } else {
+      map.push(pos)
+      text += child.type.name === 'hardBreak' ? '\n' : OBJ
+    }
+  })
+  return { text, map }
+}
+const OPEN_RE = /(?<![$\\w])\$([^$\s￼][^$￼]*)$/
+const CLOSE_RE = /(?<![$\\w])\$([^$\s￼](?:[^$￼]*[^$\s\￼])?)$/
+
+function convertDollarText(schema, text, marks) {
+  const out = []
+  let last = 0
+  for (const m of text.matchAll(DOLLAR_PASTE_RE)) {
+    if (!acceptDollarMath(m[1])) continue
+    if (m.index > last) out.push(schema.text(text.slice(last, m.index), marks))
+    out.push(schema.nodes.mathInline.create({ latex: m[1].trim() }))
+    last = m.index + m[0].length
+  }
+  if (!out.length) return null
+  if (last < text.length) out.push(schema.text(text.slice(last), marks))
+  return out
+}
+function convertDollarFragment(fragment, schema) {
+  const nodes = []
+  let changed = false
+  fragment.forEach((node) => {
+    if (node.isText) {
+      const parts = convertDollarText(schema, node.text, node.marks)
+      if (parts) {
+        changed = true
+        nodes.push(...parts)
+        return
+      }
+      nodes.push(node)
+    } else if (node.content.size && !node.type.spec.code) {
+      const inner = convertDollarFragment(node.content, schema)
+      if (inner !== node.content) changed = true
+      nodes.push(inner === node.content ? node : node.copy(inner))
+    } else nodes.push(node)
+  })
+  return changed ? Fragment.fromArray(nodes) : fragment
+}
+
+export const MathDollar = Extension.create({
+  name: 'mathDollar',
+  priority: 1000, // 마크다운 자동 변환(굵게·기울임)보다 먼저
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey('mathDollar'),
+        props: {
+          handleTextInput(view, from, to, text) {
+            const { state } = view
+            const $from = state.doc.resolve(from)
+            if (!$from.parent.isTextblock || $from.parent.type.spec.code) return false
+            const { text: before, map } = textBeforeWithMap($from)
+            if (text === '$') {
+              const m = CLOSE_RE.exec(before)
+              if (!m || !acceptDollarMath(m[1])) return false
+              const start = map[m.index]
+              const node = state.schema.nodes.mathInline.create({ latex: m[1].replace(/\n/g, ' ').trim() })
+              const tr = state.tr.replaceWith(start, to, node)
+              tr.setSelection(TextSelection.create(tr.doc, start + node.nodeSize))
+              view.dispatch(tr.scrollIntoView())
+              return true
+            }
+            // 여는 '$' 뒤 수식 입력 중: 다른 자동 변환 없이 글자 그대로
+            if (OPEN_RE.test(before)) {
+              view.dispatch(state.tr.insertText(text, from, to))
+              return true
+            }
+            return false
+          },
+          transformPasted(slice, view) {
+            const content = convertDollarFragment(slice.content, view.state.schema)
+            return content === slice.content ? slice : new Slice(content, slice.openStart, slice.openEnd)
+          },
+        },
+      }),
+    ]
+  },
+})
 
 /* ── 사진 (인라인 블록 · 크기 조절) ─────────────
  * 사진은 문단 안의 인라인 노드라서 문단 정렬(text-align)을 그대로 따르고,
@@ -599,5 +706,6 @@ export function buildExtensions() {
     MathInline,
     MathBlock,
     MathNav,
+    MathDollar,
   ]
 }
