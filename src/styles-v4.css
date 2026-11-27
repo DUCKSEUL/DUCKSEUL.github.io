@@ -2281,11 +2281,6 @@ body.is-img-dragging * {
   }
 }
 
-/* ═══ v26: 편집 화면 사진 최대 폭 98% — 오른쪽 끝에 커서·드래그 시작 여백 확보 (상세 보기는 그대로) ═══ */
-.editor-content .img-node {
-  max-width: 98%;
-}
-
 /* ═══ v27: 목차 알약 — 화면 하단 정중앙 고정, 카드는 알약 바로 위로 펼침 (데스크톱·모바일 공통) ═══ */
 .toc-float,
 .toc-float.toc-float {

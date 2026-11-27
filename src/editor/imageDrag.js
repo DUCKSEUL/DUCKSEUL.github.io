@@ -56,6 +56,29 @@ function posAtPoint(view, x, y) {
   return { pos: hit.pos, img: null }
 }
 
+/** 본문(에디터) 상자 안쪽으로 좌표 보정 — 문서 바깥 여백에서 시작·이동해도 같은 높이의 줄을 찾도록 */
+function clampPoint(view, x, y) {
+  const r = view.dom.getBoundingClientRect()
+  return { x: Math.min(Math.max(x, r.left + 2), r.right - 2), y: Math.min(Math.max(y, r.top + 2), r.bottom - 2) }
+}
+
+/** 문서 바깥(좌우 여백)을 눌렀을 때의 기준점: 그 높이 줄의 끝(오른쪽) / 시작(왼쪽), 사진 줄이면 가장 바깥 사진의 바로 뒤/앞 */
+function outsideAnchor(view, x, y) {
+  const r = view.dom.getBoundingClientRect()
+  const left = x < r.left
+  const rowImgs = imageBoxes(view)
+    .filter((b) => y >= b.rect.top && y <= b.rect.bottom)
+    .sort((a, b) => a.rect.left - b.rect.left)
+  const edgeImg = left ? rowImgs[0] : rowImgs[rowImgs.length - 1]
+  if (edgeImg) return left ? edgeImg.pos : edgeImg.pos + edgeImg.size
+  const hit = view.posAtCoords({ left: left ? r.left + 1 : r.right - 1, top: Math.min(Math.max(y, r.top + 2), r.bottom - 2) })
+  return hit ? hit.pos : null
+}
+
+// 문서 바깥 여백이라도 이런 곳을 누른 건 편집 시작이 아님
+const OUTSIDE_SKIP =
+  'input, textarea, select, button, a, label, [contenteditable="true"], .toolbar-wrap, .math-ribbon, .write-bar, .write-foot, .recovery, .modal, .toc-float, .ml-box, .math-pal, .mr-drop, .table-bar'
+
 export const ImageDragSelect = Extension.create({
   name: 'imageDragSelect',
   addProseMirrorPlugins() {
@@ -180,9 +203,16 @@ export const ImageDragSelect = Extension.create({
       const view = viewRef
       if (!drag || !view) return
       if (!(ev.buttons & 1)) return onUp()
+      drag.rawY = ev.clientY
       drag.lx = ev.clientX
       drag.ly = ev.clientY
-      if (!drag.moved && Math.hypot(ev.clientX - drag.x, ev.clientY - drag.y) < THRESHOLD) return
+      if (drag.kind === 'select') {
+        // 포인터가 문서 밖(회색 여백 등)으로 나가도 같은 높이·가장자리의 줄을 기준으로 계속 선택
+        const c = clampPoint(view, ev.clientX, ev.clientY)
+        drag.lx = c.x
+        drag.ly = c.y
+      }
+      if (!drag.moved && Math.hypot(ev.clientX - (drag.rx ?? drag.x), ev.clientY - (drag.ry ?? drag.y)) < THRESHOLD) return
       if (!drag.moved) {
         drag.moved = true
         if (drag.kind === 'move') drag.ui = startMoveUI(drag.images)
@@ -195,7 +225,7 @@ export const ImageDragSelect = Extension.create({
         if (dir && !drag.timer) {
           drag.timer = setInterval(() => {
             if (!drag || drag.kind !== 'select') return
-            const d = drag.ly < 70 ? -1 : drag.ly > window.innerHeight - 40 ? 1 : 0
+            const d = drag.rawY < 70 ? -1 : drag.rawY > window.innerHeight - 40 ? 1 : 0
             if (!d) return
             window.scrollBy(0, d * 16)
             selectAt(view)
@@ -243,7 +273,38 @@ export const ImageDragSelect = Extension.create({
         key: new PluginKey('imageDragSelect'),
         view(view) {
           viewRef = view
-          return { destroy: () => cleanup() }
+          // 문서 용지 바깥(회색 배경 · 용지 좌우 패딩)에서 누른 마우스도 본문 선택의 시작으로 — 페이지 전체(document)에서 감지
+          const onOutsideDown = (e) => {
+            if (e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey || e.detail > 1 || !view.editable) return
+            const t = e.target
+            if (!t?.closest || view.dom.contains(t) || !t.closest('.write') || t.closest(OUTSIDE_SKIP)) return
+            const r = view.dom.getBoundingClientRect()
+            if (e.clientY < r.top || e.clientY > r.bottom || (e.clientX >= r.left && e.clientX <= r.right)) return
+            const anchor = outsideAnchor(view, e.clientX, e.clientY)
+            if (anchor == null) return
+            e.preventDefault()
+            if (drag) cleanup()
+            view.focus()
+            try {
+              const $a = view.state.doc.resolve(anchor)
+              view.dispatch(view.state.tr.setSelection(TextSelection.between($a, $a)).scrollIntoView())
+            } catch {
+              return
+            }
+            // 그냥 클릭이면 위 커서(줄 끝/시작)로 끝, 끌면 그 기준점부터 범위 선택(사진 교차 판정 포함)
+            const c = clampPoint(view, e.clientX, e.clientY)
+            drag = { kind: 'select', anchor, x: c.x, y: c.y, lx: c.x, ly: c.y, rx: e.clientX, ry: e.clientY, rawY: e.clientY, moved: false, imgPos: null }
+            window.addEventListener('mousemove', onMove)
+            window.addEventListener('mouseup', onUp, true)
+            window.addEventListener('keydown', onKey, true)
+          }
+          document.addEventListener('mousedown', onOutsideDown)
+          return {
+            destroy: () => {
+              document.removeEventListener('mousedown', onOutsideDown)
+              cleanup()
+            },
+          }
         },
         props: {
           handleDOMEvents: {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useBlocker, useNavigate, useParams } from 'react-router-dom'
 import { EditorContent, useEditor } from '@tiptap/react'
-import { NodeSelection, Selection } from '@tiptap/pm/state'
+import { NodeSelection } from '@tiptap/pm/state'
 import { buildExtensions, upgradeLegacyFigures } from '../editor/extensions.js'
 import Toolbar from '../editor/Toolbar.jsx'
 import MathRibbon from '../editor/MathRibbon.jsx'
@@ -134,17 +134,7 @@ function EditorPage({ initial, categories }) {
       try {
         const src = await fileToDataUrl(f)
         const at = pos ?? ed.state.selection.from
-        // 원본 파일·해상도는 그대로 두고 화면 표시 폭만: 본문보다 넓은 사진은 본문의 98%로 넣어
-        // 사진 오른쪽 끝에 커서를 두고 클릭·왼쪽 드래그를 시작할 여백을 남김 (작은 사진은 원래 크기 — 늘려서 흐려지지 않게)
-        const natW = await new Promise((res) => {
-          const im = new Image()
-          im.onload = () => res(im.naturalWidth)
-          im.onerror = () => res(0)
-          im.src = src
-        })
-        const box = ed.view.dom.querySelector('p')?.clientWidth || ed.view.dom.clientWidth
-        const width = natW && box && natW >= box * 0.98 ? '98%' : null
-        ed.chain().focus().insertContentAt(at, { type: 'image', attrs: { src, alt: '', width } }).run()
+        ed.chain().focus().insertContentAt(at, { type: 'image', attrs: { src, alt: '' } }).run()
       } catch (e) {
         console.warn(e)
         toast('사진을 불러오지 못했어요.', 'error')
@@ -504,41 +494,7 @@ function EditorPage({ initial, categories }) {
 
   const counts = countChars(editor)
 
-  // 문서 용지의 좌우 여백 클릭: 그 높이의 줄(사진이면 사진 바로 앞/뒤)에 커서를 놓음
-  const onPaperMouseDown = (e) => {
-    const ed = editorRef.current
-    if (!ed || e.button !== 0 || e.target.closest('.ProseMirror, input, textarea, button, a')) return
-    const view = ed.view
-    const r = view.dom.getBoundingClientRect()
-    if (e.clientY < r.top || e.clientY > r.bottom) return
-    if (e.clientX >= r.left && e.clientX <= r.right) return
-    const left = e.clientX < r.left
-    const x = left ? r.left + 2 : r.right - 2
-    const hit = view.posAtCoords({ left: x, top: e.clientY })
-    if (!hit) return
-    e.preventDefault()
-    let pos = hit.pos
-    // 그 높이에 걸친 사진들 중 가장 왼쪽/오른쪽 사진의 바로 앞/뒤
-    const rowImgs = [...view.dom.querySelectorAll('.img-node')]
-      .map((el) => ({ el, r: el.getBoundingClientRect() }))
-      .filter(({ r }) => e.clientY >= r.top && e.clientY <= r.bottom)
-      .sort((a, b) => a.r.left - b.r.left)
-    const edgeImg = left ? rowImgs[0] : rowImgs[rowImgs.length - 1]
-    let imgPos = null
-    if (edgeImg) {
-      const p = view.posAtDOM(edgeImg.el, 0)
-      imgPos = [p, p - 1].find((q) => q >= 0 && ed.state.doc.nodeAt(q)?.type.name === 'image') ?? null
-    }
-    if (imgPos != null) pos = left ? imgPos : imgPos + 1
-    else {
-      // 해당 줄의 가장 가까운 끝(왼쪽 클릭 → 줄 시작, 오른쪽 → 줄 끝)
-      const edge = view.posAtCoords({ left: left ? r.left + 1 : r.right - 1, top: e.clientY })
-      if (edge) pos = edge.pos
-    }
-    const sel = Selection.near(ed.state.doc.resolve(Math.min(pos, ed.state.doc.content.size)), left ? 1 : -1)
-    view.dispatch(ed.state.tr.setSelection(sel).scrollIntoView())
-    view.focus()
-  }
+  // 문서 용지 바깥(회색 여백 · 용지 좌우 패딩) 클릭·드래그는 imageDrag.js의 페이지 단위 처리기가 담당
 
   return (
     <div className="write">
@@ -597,7 +553,7 @@ function EditorPage({ initial, categories }) {
         </div>
       )}
 
-      <div className="write-doc" onMouseDown={onPaperMouseDown}>
+      <div className="write-doc">
         <div className="write-meta">
           <input
             className="meta-input"
