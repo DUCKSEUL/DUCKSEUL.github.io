@@ -166,10 +166,16 @@ export const ImageDragSelect = Extension.create({
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp, true)
       window.removeEventListener('keydown', onKey, true)
+      if (drag?.timer) clearInterval(drag.timer)
       endMoveUI(drag?.ui)
       drag = null
     }
     let viewRef = null
+    /** 사진이 있는 글: 시작점~포인터 사각형 기준으로 범위 선택 */
+    function selectAt(view) {
+      const p = posAtPoint(view, drag.lx, drag.ly)
+      if (p) setRange(view, computeHead(view, p.pos))
+    }
     function onMove(ev) {
       const view = viewRef
       if (!drag || !view) return
@@ -183,8 +189,18 @@ export const ImageDragSelect = Extension.create({
       }
       if (drag.kind === 'move') return updateDrop(view, ev)
       if (drag.kind === 'select') {
-        const p = posAtPoint(view, ev.clientX, ev.clientY)
-        if (p) setRange(view, computeHead(view, p.pos))
+        selectAt(view)
+        // 화면 위·아래 가장자리로 끌면 자동 스크롤 (브라우저 기본 선택을 쓰지 않으므로 직접)
+        const dir = ev.clientY < 70 ? -1 : ev.clientY > window.innerHeight - 40 ? 1 : 0
+        if (dir && !drag.timer) {
+          drag.timer = setInterval(() => {
+            if (!drag || drag.kind !== 'select') return
+            const d = drag.ly < 70 ? -1 : drag.ly > window.innerHeight - 40 ? 1 : 0
+            if (!d) return
+            window.scrollBy(0, d * 16)
+            selectAt(view)
+          }, 30)
+        }
         return
       }
       // 'text': 글자 위는 브라우저 기본 선택, 사진에 닿거나 사각형에 사진이 걸리면 보정
@@ -202,6 +218,10 @@ export const ImageDragSelect = Extension.create({
         const drop = d.ui.drop
         cleanup()
         return commitMove(view, images, drop)
+      }
+      if (d.kind === 'select' && d.moved) {
+        // 마지막 위치로 한 번 더 확정 → 에디터 선택 = 실제 DOM 선택(사진 앞~뒤 포함): 바로 끌어 옮기기 · 복사 · 삭제 · 정렬 가능
+        selectAt(view)
       }
       if (!d.moved && d.imgPos != null) {
         // 그냥 클릭 = 그 사진만 선택(핸들)
@@ -249,11 +269,18 @@ export const ImageDragSelect = Extension.create({
                   drag = { ...base, kind: 'select', anchor, imgPos: hit.inside }
                 }
               } else {
+                // 수식 · 구분선 같은 다른 원자 노드, 표 안은 원래 동작(클릭 선택 · 셀 선택) 그대로
+                if (node && node.isAtom && !isImage(node)) return false
                 const $p = state.doc.resolve(hit.pos)
-                let hasImg = false
-                if ($p.parent.inlineContent) $p.parent.forEach((c) => (hasImg ||= isImage(c)))
-                if (hasImg) {
-                  // 사진이 있는 줄(사진 옆 여백 · 커서 자리)에서 시작 → 처음부터 직접 계산
+                for (let d = $p.depth; d > 0; d--) if (/^table/.test($p.node(d).type.name)) return false
+                let docHasImg = false
+                state.doc.descendants((n) => {
+                  if (docHasImg) return false
+                  if (isImage(n)) docHasImg = true
+                })
+                if ($p.parent.inlineContent && docHasImg) {
+                  // 사진이 있는 글: 사진 오른쪽 아래 커서 자리 · 아래 빈 줄 등 어디서 시작하든 처음부터 직접 계산
+                  // (브라우저 기본 선택은 사진에 닿지 못하고, 마우스를 놓는 순간 마지막 기본 선택이 보정을 덮어써 버림)
                   drag = { ...base, kind: 'select', anchor: hit.pos, imgPos: null }
                   e.preventDefault()
                   view.focus()

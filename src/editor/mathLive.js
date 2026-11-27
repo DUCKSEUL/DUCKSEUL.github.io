@@ -31,6 +31,9 @@ export function cleanLatex(s = '') {
     .replace(/\\placeholder(\[[^\]]*\])?\{[^{}]*\}/g, '{}')
     .replace(/\\mleft/g, '\\left')
     .replace(/\\mright/g, '\\right')
+    // 굵은 기울임: MathLive '\mathbf{\mathbfit{x}}' · '\mathbfit{x}'는 KaTeX에 없음 → '\boldsymbol{x}'
+    .replace(/\\mathbf\{\\mathbfit\{([^{}]*)\}\}/g, '\\boldsymbol{$1}')
+    .replace(/\\mathbfit\{/g, '\\boldsymbol{')
     // 굵은 그리스 문자 + 첨자: MathLive는 '\bm{\eta_{12}}'(첨자까지 굵게)로 내보냄 → 밑수만 굵게 '\boldsymbol{\eta}_{12}'
     .replace(/\\bm\{(\\[a-zA-Z]+|[^\\{}_^])((?:[_^](?:\{[^{}]*\}|[^{}\\\s]))+)\}/g, '\\boldsymbol{$1}$2')
     .trim()
@@ -102,7 +105,12 @@ export function linearToLatex(s = '') {
     }
     let tex
     let wrap = null
-    if (c === '{') {
+    // 빈 괄호 쌍 → PowerPoint처럼 늘어나는 큰 괄호 + 가운데 점선 칸 ('[]' + Space → [⬚])
+    const pair = EMPTY_PAIRS.find(([k]) => s.startsWith(k, i))
+    if (pair) {
+      tex = pair[1]
+      i += pair[0].length
+    } else if (c === '{') {
       tex = readGroup('{', '}')
       wrap = '{'
     } else if (c === '(') {
@@ -119,6 +127,7 @@ export function linearToLatex(s = '') {
     } else if (/[A-Za-z0-9.]/.test(c)) {
       tex = /^[A-Za-z0-9.]+/.exec(s.slice(i))[0]
       i += tex.length
+      if (FUNCS.has(tex)) tex = `\\${tex}` // sin · cos · log … → 함수 이름(정체)
     } else if (c === '_' || c === '^') {
       tex = ''
     } else {
@@ -150,5 +159,28 @@ export function linearToLatex(s = '') {
     const den = next && next.tex !== undefined ? units[++k] : null
     out.push({ tex: `\\frac{${strip(num)}}{${strip(den)}}` })
   }
-  return out.map((u) => u.raw ?? u.tex).join('')
+  // 이어 붙일 때 '\alpha' 뒤에 영문자가 오면 명령이 붙지 않게 공백
+  return out.reduce((acc, u) => {
+    const t = u.raw ?? u.tex
+    return acc + (/\\[a-zA-Z]+$/.test(acc) && /^[A-Za-z]/.test(t) ? ' ' : '') + t
+  }, '')
+}
+
+const FUNCS = new Set(['sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'sinh', 'cosh', 'tanh', 'log', 'ln', 'exp', 'lim', 'max', 'min', 'det', 'arg', 'deg'])
+/** 빈 괄호 쌍 → 큰 괄호 + 점선 칸(#?) */
+export const EMPTY_PAIRS = [
+  ['()', '\\left(#?\\right)'],
+  ['[]', '\\left[#?\\right]'],
+  ['{}', '\\left\\{#?\\right\\}'],
+  ['\\{\\}', '\\left\\{#?\\right\\}'],
+  ['||', '\\left|#?\\right|'],
+  ['<>', '\\left\\langle#?\\right\\rangle'],
+]
+/** 선택한 수식을 감싸는 큰 괄호 (여는 괄호 키 → 템플릿) */
+export const WRAP_BRACKETS = {
+  '(': '\\left(#0\\right)',
+  '[': '\\left[#0\\right]',
+  '{': '\\left\\{#0\\right\\}',
+  '|': '\\left|#0\\right|',
+  '<': '\\left\\langle#0\\right\\rangle',
 }

@@ -279,7 +279,7 @@ export const Figure = Node.create({
       let node = initial
       const dom = document.createElement('span')
       dom.className = 'img-node'
-      dom.setAttribute('data-drag-handle', '')
+      dom.draggable = false // 브라우저 고스트 이미지 끌기 금지 (옮기기는 imageDrag.js의 직접 구현)
       const img = document.createElement('img')
       img.draggable = false
       dom.appendChild(img)
