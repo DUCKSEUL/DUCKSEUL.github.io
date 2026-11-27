@@ -31,6 +31,8 @@ export function cleanLatex(s = '') {
     .replace(/\\placeholder(\[[^\]]*\])?\{[^{}]*\}/g, '{}')
     .replace(/\\mleft/g, '\\left')
     .replace(/\\mright/g, '\\right')
+    // 굵은 그리스 문자 + 첨자: MathLive는 '\bm{\eta_{12}}'(첨자까지 굵게)로 내보냄 → 밑수만 굵게 '\boldsymbol{\eta}_{12}'
+    .replace(/\\bm\{(\\[a-zA-Z]+|[^\\{}_^])((?:[_^](?:\{[^{}]*\}|[^{}\\\s]))+)\}/g, '\\boldsymbol{$1}$2')
     .trim()
 }
 

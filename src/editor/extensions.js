@@ -13,6 +13,7 @@ import { Fragment, Slice } from '@tiptap/pm/model'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import MathView from './MathView.jsx'
 import { DOLLAR_PASTE_RE, acceptDollarMath } from './mathTools.js'
+import { ImageDragSelect } from './imageDrag.js'
 
 /* ── 수식 (인라인 / 블록) ───────────────────── */
 function mathNode(name, inline) {
@@ -462,103 +463,6 @@ export const ImageSelectionVisuals = Extension.create({
             }
             return decos.length ? DecorationSet.create(doc, decos) : null
           },
-        },
-      }),
-    ]
-  },
-})
-
-/**
- * 사진을 가로지르는 마우스 드래그 = 글자처럼 범위 선택 (Word 방식)
- * - 문제: 사진(contenteditable=false 원자 노드) 위로 드래그가 들어가면 브라우저가 선택 끝점을 둘 곳이 없어
- *   ① 사진 한 장만 덮이면 '노드 선택'(클릭 선택 · 핸들)으로 바뀌거나 ② 사진 위에서는 선택이 늘어나지 않음
- * - 해결: 드래그 중 포인터가 사진 위에 있으면 그 사진 전체가 들어가도록 선택 끝을 사진 바깥쪽 경계로 지정,
- *   노드 선택으로 바뀌는 것도 범위(TextSelection)로 되돌림 → 파란 범위 하이라이트(.is-selected-range) · 복사 · 삭제 · 정렬 그대로
- * - 선택되지 않은 사진 위에서 누르고 끌면 고스트 이미지 끌기 대신 범위 선택 / 그냥 클릭 = 사진 선택(핸들)
- *   이미 선택된(핸들이 보이는) 사진을 끌면 기존처럼 사진 옮기기
- */
-export const ImageDragSelect = Extension.create({
-  name: 'imageDragSelect',
-  addProseMirrorPlugins() {
-    let drag = null // { anchor, x, y, moved, onImg, imgPos }
-    const headFor = (state, from, to) => (drag.anchor <= from ? to : from)
-    const setRange = (view, head) => {
-      const { state } = view
-      const max = state.doc.content.size
-      const a = Math.min(Math.max(0, drag.anchor), max)
-      const h = Math.min(Math.max(0, head), max)
-      const cur = state.selection
-      if (!(cur instanceof NodeSelection) && cur.anchor === a && cur.head === h) return
-      try {
-        view.dispatch(state.tr.setSelection(TextSelection.between(state.doc.resolve(a), state.doc.resolve(h))))
-      } catch {
-        /* 문서 경계 밖 등: 브라우저 기본 선택에 맡김 */
-      }
-    }
-    return [
-      new Plugin({
-        key: new PluginKey('imageDragSelect'),
-        props: {
-          handleDOMEvents: {
-            mousedown(view, e) {
-              if (e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey || e.detail > 1 || !view.editable) return false
-              const hit = view.posAtCoords({ left: e.clientX, top: e.clientY })
-              if (!hit) return false
-              const { state } = view
-              const node = hit.inside >= 0 ? state.doc.nodeAt(hit.inside) : null
-              const imgEl = e.target?.closest?.('.img-node')
-              const onImg = isImage(node) && !!imgEl
-              const sel = state.selection
-              // 이미 선택된 사진을 누름 → 기존 동작(끌어서 옮기기 · 핸들)
-              if (onImg && sel instanceof NodeSelection && sel.from === hit.inside) return false
-              let anchor = hit.pos
-              if (onImg) {
-                const r = imgEl.getBoundingClientRect()
-                anchor = e.clientX < r.left + r.width / 2 ? hit.inside : hit.inside + node.nodeSize
-              }
-              drag = { anchor, x: e.clientX, y: e.clientY, moved: false, onImg, imgPos: onImg ? hit.inside : null }
-              const move = (ev) => {
-                if (!drag || !(ev.buttons & 1)) return
-                if (!drag.moved && Math.hypot(ev.clientX - drag.x, ev.clientY - drag.y) < 4) return
-                drag.moved = true
-                const h = view.posAtCoords({ left: ev.clientX, top: ev.clientY })
-                if (!h) return
-                const n = h.inside >= 0 ? view.state.doc.nodeAt(h.inside) : null
-                if (isImage(n)) setRange(view, headFor(view.state, h.inside, h.inside + n.nodeSize))
-                else if (drag.onImg) setRange(view, h.pos) // 사진에서 시작한 드래그는 끝까지 직접 계산
-                // 글자에서 시작해 글자 위를 지나는 동안은 브라우저 기본 선택 그대로
-              }
-              const up = () => {
-                window.removeEventListener('mousemove', move)
-                window.removeEventListener('mouseup', up, true)
-                const d = drag
-                drag = null
-                if (d?.onImg && !d.moved) {
-                  const { state: s } = view
-                  if (isImage(s.doc.nodeAt(d.imgPos))) view.dispatch(s.tr.setSelection(NodeSelection.create(s.doc, d.imgPos)))
-                }
-              }
-              window.addEventListener('mousemove', move)
-              window.addEventListener('mouseup', up, true)
-              if (onImg) {
-                // 고스트 이미지 끌기 · 브라우저 기본 선택 시작을 막고 직접 처리
-                e.preventDefault()
-                view.focus()
-                return true
-              }
-              return false
-            },
-          },
-        },
-        // 드래그 중 브라우저 선택이 사진 한 장을 딱 덮어 '노드 선택'이 되면 범위 선택으로 유지
-        appendTransaction(_trs, _old, state) {
-          const sel = state.selection
-          if (!drag?.moved || !(sel instanceof NodeSelection) || !isImage(sel.node)) return null
-          try {
-            return state.tr.setSelection(TextSelection.between(state.doc.resolve(drag.anchor), state.doc.resolve(headFor(state, sel.from, sel.to))))
-          } catch {
-            return null
-          }
         },
       }),
     ]

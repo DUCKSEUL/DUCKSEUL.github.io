@@ -21,6 +21,18 @@ function matrixEnvAtCaret(mf) {
   return null
 }
 
+/** 커서가 첨자·분자/분모·근호 등 칸 안이면 1 이상, 수식 맨 바깥이면 0 */
+function caretDepth(mf) {
+  try {
+    const model = mf._mathfield?.model
+    let d = 0
+    for (let a = model?.at(model.position)?.parent; a && a.type !== 'root'; a = a.parent) d++
+    return d
+  } catch {
+    return 1 // 알 수 없으면 기본 동작(칸 밖으로)
+  }
+}
+
 export default function VisualMath({ latex, display, enterSide, apiRef, onCommit, onRaw }) {
   const boxRef = useRef(null)
   const hostRef = useRef(null)
@@ -118,6 +130,8 @@ export default function VisualMath({ latex, display, enterSide, apiRef, onCommit
       mf.smartMode = false
       mf.mathVirtualKeyboardPolicy = 'manual'
       mf.defaultMode = 'math'
+      // 새로 치는 글자가 앞 노드의 서체(\mathbf · \mathrm …)를 물려받지 않게 — '\mathbf{\eta}' 뒤 '_12'의 12는 보통 글꼴 (PowerPoint와 같음)
+      mf.onInsertStyle = () => ({})
       mf.className = 'ml-field'
       hostRef.current.appendChild(mf)
       mf.value = latex
@@ -131,6 +145,16 @@ export default function VisualMath({ latex, display, enterSide, apiRef, onCommit
 
       const onKey = (e) => {
         if (e.isComposing) return
+        const plain = !e.altKey && !e.ctrlKey && !e.metaKey
+        // PowerPoint식 선형 입력 보정 (LaTeX 명령 입력 중('\…')에는 MathLive 기본 동작 그대로)
+        //  - '{' '}': 묶음은 칸 구조가 대신하므로 글자 괄호로 넣지 않음 → '_{12}' = '_12', '}' = 현재 칸 밖으로
+        //  - Space: 첨자·분모 등 칸 안이면 그 칸 밖으로(조립된 노드는 그대로 유지), 맨 바깥이면 아무것도 안 함(상자가 닫히지 않게)
+        if (plain && mf.mode !== 'latex' && (e.key === '{' || e.key === '}' || e.key === ' ')) {
+          e.preventDefault()
+          e.stopPropagation()
+          if (e.key !== '{' && caretDepth(mf) > 0) mf.executeCommand('moveAfterParent')
+          return
+        }
         if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
           e.preventDefault()
           e.stopPropagation()
@@ -176,8 +200,11 @@ export default function VisualMath({ latex, display, enterSide, apiRef, onCommit
           mf.executeCommand(['typedText', '\\'])
           inLatex = true
         } else if (ch === ' ') {
-          mf.executeCommand(inLatex ? 'complete' : 'moveAfterParent')
+          if (inLatex) mf.executeCommand('complete')
+          else if (caretDepth(mf) > 0) mf.executeCommand('moveAfterParent')
           inLatex = false
+        } else if (!inLatex && (ch === '{' || ch === '}')) {
+          if (ch === '}' && caretDepth(mf) > 0) mf.executeCommand('moveAfterParent')
         } else mf.executeCommand(['typedText', ch])
       }
       onSel()

@@ -2010,3 +2010,84 @@ li.paper,
     bottom: 16px;
   }
 }
+
+/* ═══ v22: 선택한 사진 끌어서 옮기기 — 미리보기 + 삽입 위치 선 (편집 화면 전용) ═══ */
+.img-drag-preview {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 2147483000;
+  display: inline-flex;
+  align-items: flex-end;
+  pointer-events: none;
+  will-change: transform;
+}
+.img-drag-preview img {
+  position: relative;
+  z-index: 1;
+  display: block;
+  max-width: 120px;
+  max-height: 84px;
+  border-radius: 6px;
+  outline: 2px solid #3b82f6;
+  outline-offset: 1px;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.28);
+  background: #fff;
+  opacity: 0.92;
+}
+.img-drag-stack {
+  position: absolute;
+  inset: -5px 5px 5px -5px;
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.18);
+  outline: 2px solid rgba(59, 130, 246, 0.55);
+}
+.img-drag-badge {
+  position: relative;
+  z-index: 2;
+  margin: 0 0 -8px -14px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+}
+.img-drop-line {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 2147482999;
+  width: 3px;
+  border-radius: 2px;
+  background: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+  pointer-events: none;
+  transition: transform 0.06s linear, height 0.06s linear;
+}
+.img-drop-line::before,
+.img-drop-line::after {
+  content: '';
+  position: absolute;
+  left: -3px;
+  width: 9px;
+  height: 3px;
+  border-radius: 2px;
+  background: #2563eb;
+}
+.img-drop-line::before {
+  top: 0;
+}
+.img-drop-line::after {
+  bottom: 0;
+}
+body.is-img-dragging,
+body.is-img-dragging * {
+  cursor: grabbing !important;
+}
+/* 선택된(범위 하이라이트) 사진은 잡아서 옮길 수 있음 */
+.editor-content .img-node.is-selected-range img {
+  cursor: grab;
+}
