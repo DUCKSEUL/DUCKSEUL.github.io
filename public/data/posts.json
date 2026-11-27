@@ -1,5 +1,15 @@
 [
   {
+    "id": "p-mwycc8nu38h9",
+    "title": "261127 Huygens' Box Phase Shifter",
+    "category": "연구 노트",
+    "tags": [],
+    "createdAt": "2026-11-27T02:07:01.338Z",
+    "updatedAt": "2026-11-27T02:46:50.032Z",
+    "draft": false,
+    "html": "<p style=\"text-align: center;\">10 GHz / 0.787 mm / TLY-5</p><p style=\"text-align: center;\">16 CH</p><p style=\"text-align: center;\"></p><p style=\"text-align: center;\">Wilkinson 디바이더의 저항칩 100 Ohm?</p><p style=\"text-align: center;\">varactor bias를 위한 RF chock 20 KOhm</p><hr data-style=\"line\"><p style=\"text-align: center;\">Edge launch 형 SMA connector</p><p style=\"text-align: center;\"><img data-type=\"figure\" src=\"https://mm.digikey.com/Volume0/opasdata/d220001/derivates/6/002/643/896/142-0701-841%2C%20142-0701-851_web%28640x640%29.jpg?hidebanner=true\" alt=\"SMA 커넥터 잭, 암 소켓 50옴 기판 에지, 말단부 입력 솔더 탭\" style=\"width: 49%;\"><img data-type=\"figure\" src=\"https://mm.digikey.com/Volume0/opasdata/d220001/derivates/6/003/224/215/MFG_RFPCB-SMA-FS18G-52_web%28640x640%29.jpg?hidebanner=true\" alt=\"SMA 커넥터 리셉터클, 암 소켓 50옴 기판 에지, 말단부 입력, 직각 솔더\" style=\"width: 49%;\"></p><p style=\"text-align: center;\"><a target=\"_blank\" rel=\"noopener noreferrer nofollow\" href=\"https://www.digikey.kr/ko/products/detail/cinch-connectivity-solutions-johnson/142-0701-851/273369\">https://www.digikey.kr/ko/products/detail/cinch-connectivity-solutions-johnson/142-0701-851/273369</a></p><p style=\"text-align: center;\"><a target=\"_blank\" rel=\"noopener noreferrer nofollow\" href=\"https://www.digikey.kr/ko/products/detail/l-com/RFPCB-SMA-FS18G-52/24751642?s=N4IgjCBcoGwJxVAYygMwIYBsDOBTANCAPZQDaIAzAExhgAsMIAuoQA4AuUIAyuwE4BLAHYBzEAF9xhKmR4BZAIIACJESFDcSdkT7NCAVkQhWUMGxOQq%2ByUA\">https://www.digikey.kr/ko/products/detail/l-com/RFPCB-SMA-FS18G-52/24751642?s=N4IgjCBcoGwJxVAYygMwIYBsDOBTANCAPZQDaIAzAExhgAsMIAuoQA4AuUIAyuwE4BLAHYBzEAF9xhKmR4BZAIIACJESFDcSdkT7NCAVkQhWUMGxOQq%2ByUA</a></p><p style=\"text-align: center;\"></p>"
+  },
+  {
     "id": "p-mwy7bu2gky4f",
     "title": "261127 3D MoM 시작 전",
     "category": "연구 노트",
