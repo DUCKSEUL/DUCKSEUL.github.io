@@ -1,18 +1,12 @@
 // PowerPoint(Office Math)식 구조 수식 편집기 — MathLive <math-field>
-// - 점선 빈 칸(⬚) · 실시간 조립: a/b → 분수, x^2 · S_11 → 첨자, '\mathrm{S}' · '\alpha' + Space → 기호/서체, Space = 현재 칸 밖으로
+// - 본문에는 외곽 프레임 + 점선 빈 칸(⬚)만 있는 '순수 수식 입력창' (팔레트·버튼은 상단 [수식] 리본으로: MathRibbon.jsx)
+// - 실시간 조립: a/b → 분수, x^2 · S_11 → 첨자, '\mathrm{S}' · '\alpha' · '\pm' + Space → 기호/서체, Space = 현재 칸 밖으로
 // - ← → ↑ ↓ / Tab으로 분자↔분모, 첨자↔본문, 행렬 칸 사이 이동 · Backspace는 구조 한 단계씩
-// - 행렬 안에 커서가 있으면 위쪽 미니 바: + 행 / − 행 / + 열 / − 열 / [ ] ( ) | | (우클릭 메뉴에도 같은 기능)
-// - Enter · 바깥 클릭 → 표준 LaTeX로 확정(KaTeX 렌더링) / Esc → 확정 후 빠져나감 / 'TeX' 버튼 → LaTeX 원문 편집
+// - Enter · 바깥 클릭 → 표준 LaTeX로 확정(KaTeX 렌더링) / Esc → 확정 후 빠져나감
 import { useEffect, useRef, useState } from 'react'
-import MathPalette from './MathPalette.jsx'
 import { SHADOW_CSS, cleanLatex, loadMathLive, toMathLiveTemplate } from './mathLive.js'
 import { isValidLatex } from './mathTools.js'
-
-const BRACKETS = [
-  { env: 'bmatrix', label: '[ ]', title: '대괄호 행렬' },
-  { env: 'pmatrix', label: '( )', title: '소괄호 행렬' },
-  { env: 'vmatrix', label: '| |', title: '행렬식' },
-]
+import { clearMathRibbon, publishMathRibbon } from './mathRibbonStore.js'
 
 /** 커서가 행렬 안이면 그 환경 이름 (커서 위치 원소에서 부모 쪽으로 올라가며 행렬(array) 찾기) */
 function matrixEnvAtCaret(mf) {
@@ -22,7 +16,7 @@ function matrixEnvAtCaret(mf) {
       if (a.type === 'array' && /matrix$/.test(a.environmentName || '')) return a.environmentName
     }
   } catch {
-    /* 내부 구조가 바뀐 경우: 미니 바만 숨김 (우클릭 메뉴로도 행·열 조절 가능) */
+    /* 내부 구조가 바뀐 경우: 행렬 편집 버튼만 비활성 (우클릭 메뉴로도 행·열 조절 가능) */
   }
   return null
 }
@@ -32,10 +26,10 @@ export default function VisualMath({ latex, display, enterSide, apiRef, onCommit
   const hostRef = useRef(null)
   const mfRef = useRef(null)
   const done = useRef(false)
+  const owner = useRef({})
   const [ready, setReady] = useState(false)
   const [error, setError] = useState(null)
   const [matrixEnv, setMatrixEnv] = useState(null)
-  const [tick, setTick] = useState(0) // 팔레트 위치 다시 계산용
 
   const current = () => cleanLatex(mfRef.current?.getValue('latex') ?? latex)
   if (apiRef) apiRef.current = { get: current }
@@ -54,6 +48,51 @@ export default function VisualMath({ latex, display, enterSide, apiRef, onCommit
     done.current = true
     onCommit(text, move)
   }
+
+  const run = (cmd) => {
+    const mf = mfRef.current
+    if (!mf) return
+    mf.focus()
+    mf.executeCommand(cmd)
+    setMatrixEnv(matrixEnvAtCaret(mf))
+  }
+
+  const insertTemplate = (item) => {
+    const mf = mfRef.current
+    if (!mf) return
+    mf.focus()
+    mf.insert(item.ml || toMathLiveTemplate(item.ins), { format: 'latex', selectionMode: 'placeholder', focus: true })
+    setError(null)
+    setMatrixEnv(matrixEnvAtCaret(mf))
+  }
+
+  // 리본에서 부르는 동작은 항상 최신 렌더의 함수로 (클로저 고정 방지)
+  const live = useRef(null)
+  live.current = {
+    finish: () => finish('after'),
+    insert: insertTemplate,
+    run,
+    toggleMode: () => {
+      done.current = true
+      onRaw(current())
+    },
+  }
+
+  // 상단 툴바 → PowerPoint [수식] 리본으로 전환 (행렬 안/밖이 바뀔 때마다 갱신)
+  useEffect(() => {
+    if (!ready) return
+    publishMathRibbon({
+      owner: owner.current,
+      kind: 'visual',
+      matrixEnv,
+      finish: () => live.current.finish(),
+      insert: (it) => live.current.insert(it),
+      run: (cmd) => live.current.run(cmd),
+      toggleMode: () => live.current.toggleMode(),
+    })
+  }, [ready, matrixEnv])
+  useEffect(() => () => clearMathRibbon(owner.current), [])
+
   const finishRef = useRef(finish)
   finishRef.current = finish
 
@@ -111,17 +150,13 @@ export default function VisualMath({ latex, display, enterSide, apiRef, onCommit
         e.preventDefault()
         finishRef.current(d === 'backward' ? 'before' : d === 'upward' ? 'up' : d === 'downward' ? 'down' : 'after')
       }
-      const onSel = () => {
-        setMatrixEnv(matrixEnvAtCaret(mf))
-      }
-      const onInput = () => {
-        setError(null)
-        setTick((t) => t + 1)
-      }
+      const onSel = () => setMatrixEnv(matrixEnvAtCaret(mf))
+      const onInput = () => setError(null)
       const onFocusOut = (e) => {
-        // 다른 창으로 전환했거나, 팔레트·미니 바 등 편집기 안으로 포커스가 옮겨 가면 그대로
+        // 다른 창으로 전환했거나, 상단 리본 등 편집기 안으로 포커스가 옮겨 가면 그대로
         // 바로 확정해야 함: 에디터가 선택을 바꿔 이 편집기가 사라지기 전에
-        if (!document.hasFocus() || (e.relatedTarget && boxRef.current?.contains(e.relatedTarget))) return
+        if (!document.hasFocus()) return
+        if (e.relatedTarget && (boxRef.current?.contains(e.relatedTarget) || e.relatedTarget.closest?.('.math-ribbon'))) return
         finishRef.current(null)
       }
       mf.addEventListener('keydown', onKey, { capture: true })
@@ -156,73 +191,25 @@ export default function VisualMath({ latex, display, enterSide, apiRef, onCommit
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const run = (cmd) => {
-    const mf = mfRef.current
-    if (!mf) return
-    mf.focus()
-    mf.executeCommand(cmd)
-    setMatrixEnv(matrixEnvAtCaret(mf))
-    setTick((t) => t + 1)
-  }
-
-  const insertTemplate = (ins, item) => {
-    const mf = mfRef.current
-    if (!mf) return
-    mf.focus()
-    mf.insert(item?.ml || toMathLiveTemplate(ins), { format: 'latex', selectionMode: 'placeholder', focus: true })
-    setError(null)
-    setTick((t) => t + 1)
-  }
-
   return (
-    <>
-      <span
-        ref={boxRef}
-        className={`ml-box ${display ? 'is-block' : ''} ${error ? 'has-error' : ''}`}
-        onMouseDown={(e) => {
-          // 프레임 여백·버튼을 눌러도 수식 칸 포커스 유지
-          if (e.target === mfRef.current) return
-          e.preventDefault()
-          mfRef.current?.focus()
-        }}
-      >
-        {matrixEnv && (
-          <span className="ml-matrix-bar" role="toolbar" aria-label="행렬 편집">
-            <button type="button" onClick={() => run('addRowAfter')} title="현재 칸 아래에 행 추가">+ 행</button>
-            <button type="button" onClick={() => run('removeRow')} title="현재 행 삭제">− 행</button>
-            <button type="button" onClick={() => run('addColumnAfter')} title="현재 칸 오른쪽에 열 추가">+ 열</button>
-            <button type="button" onClick={() => run('removeColumn')} title="현재 열 삭제">− 열</button>
-            <span className="mx-sep" />
-            {BRACKETS.map((b) => (
-              <button key={b.env} type="button" className={matrixEnv === b.env ? 'is-on' : ''} onClick={() => run(['setEnvironment', b.env])} title={b.title}>
-                {b.label}
-              </button>
-            ))}
-          </span>
-        )}
-        <span ref={hostRef} className="ml-host" />
-        {!ready && <span className="ml-loading">수식 편집기 준비 중…</span>}
-        <button
-          type="button"
-          className="ml-tex"
-          title="LaTeX 원문으로 편집"
-          onClick={() => {
-            done.current = true
-            onRaw(current())
-          }}
-        >
-          TeX
-        </button>
-        <span className="math-box-hint" aria-hidden>
-          Enter ↵
+    <span
+      ref={boxRef}
+      className={`ml-box ${display ? 'is-block' : ''} ${error ? 'has-error' : ''}`}
+      title="Enter 확정 · Esc 닫기 · 상단 [수식] 리본에서 구조·기호 삽입"
+      onMouseDown={(e) => {
+        // 프레임 여백을 눌러도 수식 칸 포커스 유지
+        if (e.target === mfRef.current) return
+        e.preventDefault()
+        mfRef.current?.focus()
+      }}
+    >
+      <span ref={hostRef} className="ml-host" />
+      {!ready && <span className="ml-loading">수식 편집기 준비 중…</span>}
+      {error && (
+        <span className="math-box-error" role="alert">
+          {error}
         </span>
-        {error && (
-          <span className="math-box-error" role="alert">
-            {error}
-          </span>
-        )}
-      </span>
-      {ready && <MathPalette anchorRef={boxRef} onInsert={insertTemplate} deps={`${tick}|${matrixEnv}|${error}`} />}
-    </>
+      )}
+    </span>
   )
 }

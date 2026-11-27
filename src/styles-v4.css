@@ -1732,7 +1732,9 @@ li.paper,
   bottom: auto;
   line-height: inherit;
 }
-/* 사진 바로 옆 커서: 글자 크기만 한 기본 커서 대신 사진 높이의 커서 (깜빡임) */
+/* 사진 바로 옆 커서 = 일반 글자 줄과 같은 높이(약 1.2em)로 사진 아랫변 기준선 옆에
+ * 크롬은 기본 커서를 옆 사진(인라인 블록) 높이만큼 길게 그리고 CSS로 높이를 바꿀 수 없음
+ * → 그 줄만 기본 커서를 숨기고(caret-color) 글자 높이의 커서를 대신 그림 (깜빡임 · 편집 화면 전용) */
 .editor-content .has-img-caret {
   caret-color: transparent;
 }
@@ -1740,12 +1742,10 @@ li.paper,
 .editor-content .img-node.img-caret-before::after {
   content: '';
   position: absolute;
-  bottom: 0;
-  width: 2px;
-  height: 100%;
-  min-height: 1.2em;
-  border-radius: 1px;
-  background: currentColor;
+  bottom: -0.22em; /* 글자 커서처럼 기준선 아래(내림 글자 자리)까지 */
+  width: 1.5px;
+  height: 1.2em;
+  background: var(--g900, #191f28);
   pointer-events: none;
   opacity: 0;
 }
@@ -1791,4 +1791,222 @@ li.paper,
 .editor-content .img-node img::selection,
 .editor-content .img-node::selection {
   background: transparent;
+}
+
+/* ═══ v21: PowerPoint [수식] 리본 — 수식 입력 모드 동안 상단 툴바 자리에 표시 (편집 화면 전용) ═══ */
+.math-ribbon {
+  align-items: stretch;
+  gap: 0;
+  padding: 6px 12px 4px;
+  user-select: none;
+  animation: mr-in 0.14s ease-out;
+}
+@keyframes mr-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: none; }
+}
+.mr-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+  padding: 0 10px;
+  border-right: 1px solid var(--line);
+}
+.mr-group:last-child {
+  border-right: 0;
+}
+.mr-cap {
+  color: var(--g500);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.math-ribbon button {
+  border: 0;
+  background: transparent;
+  color: var(--g700);
+  font: inherit;
+  cursor: pointer;
+}
+.math-ribbon button:hover:not(:disabled) {
+  background: var(--fill);
+  color: var(--g900);
+}
+.math-ribbon button:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+/* 도구 */
+.mr-tools {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 3px;
+  align-items: center;
+}
+.mr-done {
+  grid-row: span 2;
+  height: 100%;
+  min-height: 70px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: var(--blue-weak) !important;
+  color: var(--blue) !important;
+  font-size: 0.84rem !important;
+  font-weight: 700 !important;
+}
+.mr-done:hover {
+  filter: brightness(0.97);
+}
+.mr-small {
+  height: 33px;
+  padding: 0 9px;
+  border-radius: 6px;
+  font-size: 0.76rem !important;
+  font-weight: 600 !important;
+  white-space: nowrap;
+}
+/* 기호 갤러리: 2줄 격자 */
+.mr-symbols {
+  display: grid;
+  grid-template-rows: repeat(3, 24px);
+  grid-auto-flow: column;
+  grid-auto-columns: 25px;
+  gap: 1px 2px;
+}
+.mr-sym {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 24px;
+  padding: 0;
+  border-radius: 5px;
+  font-family: 'STIX Two Text', 'Times New Roman', serif !important;
+  font-size: 1.06rem !important;
+  line-height: 1;
+}
+/* 구조: 큰 아이콘 + 아래 이름(▾) — 누르면 템플릿 갤러리 */
+.mr-structs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+}
+.mr-struct {
+  position: relative;
+}
+.mr-big {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+  min-width: 48px;
+  height: 74px;
+  padding: 4px 5px 3px;
+  border-radius: 8px;
+}
+.mr-struct.is-open .mr-big {
+  background: var(--blue-weak);
+  color: var(--blue);
+}
+.mr-big .mr-katex {
+  display: grid;
+  place-items: center;
+  height: 34px;
+  font-size: 0.92rem;
+  color: var(--g900);
+}
+.mr-big .mr-katex .katex {
+  font-size: 1em;
+}
+.mr-big-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.mr-caret {
+  font-size: 0.6rem;
+  opacity: 0.7;
+}
+.mr-drop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  z-index: 60;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(118px, auto));
+  gap: 4px;
+  min-width: 248px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+  transform: translateX(-50%);
+  animation: mr-fade 0.12s ease-out;
+}
+@keyframes mr-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.mr-drop-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 6px 6px;
+  border-radius: 8px;
+  border: 1px solid transparent !important;
+}
+.mr-drop-item:hover {
+  border-color: var(--blue) !important;
+  background: var(--blue-weak) !important;
+}
+.mr-drop-item .mr-katex {
+  display: grid;
+  place-items: center;
+  min-height: 46px;
+  color: var(--g900);
+  font-size: 1.05rem;
+}
+.mr-drop-item > span:last-child {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--g600, var(--g700));
+}
+/* 행렬 편집 */
+.mr-matrix-btns {
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  gap: 3px;
+}
+.mr-matrix-btns button {
+  height: 33px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  white-space: nowrap;
+}
+.mr-matrix-btns button.is-on {
+  background: var(--blue-weak);
+  color: var(--blue);
+}
+.mr-matrix.is-off .mr-cap {
+  opacity: 0.7;
+}
+@media (max-width: 760px) {
+  .math-ribbon {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+  .mr-drop {
+    position: fixed;
+    top: auto;
+    left: 50%;
+    bottom: 16px;
+  }
 }

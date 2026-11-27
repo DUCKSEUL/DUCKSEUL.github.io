@@ -9,7 +9,8 @@ import { NodeViewWrapper } from '@tiptap/react'
 import { NodeSelection, TextSelection } from '@tiptap/pm/state'
 import katex from 'katex'
 import { renderLatex } from '../lib/math.js'
-import MathPalette, { applyTemplate } from './MathPalette.jsx'
+import { applyTemplate } from './MathPalette.jsx'
+import { clearMathRibbon, publishMathRibbon } from './mathRibbonStore.js'
 import VisualMath from './VisualMath.jsx'
 import BuildupField, { fieldLatex } from './BuildupField.jsx'
 
@@ -199,6 +200,36 @@ export default function MathView({ node, editor, getPos, selected }) {
     return () => window.removeEventListener('math-toggle-display', on)
   })
 
+  // LaTeX 원문 상자에서도 상단 [수식] 리본 사용 (구조 템플릿은 원문 문법으로 삽입)
+  const owner = useRef({})
+  const live = useRef(null)
+  live.current = {
+    insert: (it) => insertTemplate(it.ins),
+    toggleMode: () => {
+      done.current = true
+      setDraft(fieldLatex({ tokens: field.tokens, text: inputRef.current?.value ?? value }))
+      setMode('visual')
+    },
+    finish: () => {
+      const all = fieldLatex({ tokens: field.tokens, text: inputRef.current?.value ?? value })
+      const err = all ? parseError(all, display) : null
+      if (err) setError(err)
+      else commit('after')
+    },
+  }
+  useEffect(() => {
+    if (!editing || mode !== 'raw') return
+    const me = owner.current
+    publishMathRibbon({
+      owner: me,
+      kind: 'raw',
+      insert: (it) => live.current.insert(it),
+      toggleMode: () => live.current.toggleMode(),
+      finish: () => live.current.finish(),
+    })
+    return () => clearMathRibbon(me)
+  }, [editing, mode])
+
   return (
     <NodeViewWrapper
       as={display ? 'div' : 'span'}
@@ -253,28 +284,12 @@ export default function MathView({ node, editor, getPos, selected }) {
             minCh={MATH_PLACEHOLDER.length * 1.95}
             aria-label="LaTeX 수식 입력 (Space 수식 변환 · Enter 확정)"
           />
-          <button
-            type="button"
-            className="ml-tex"
-            title="구조 편집기(점선 칸)로 돌아가기"
-            onClick={() => {
-              done.current = true
-              setDraft(fieldLatex({ tokens: field.tokens, text: inputRef.current?.value ?? value }))
-              setMode('visual')
-            }}
-          >
-            ⬚ 구조
-          </button>
-          <span className="math-box-hint" aria-hidden>
-            Enter ↵
-          </span>
           {error && (
             <span className="math-box-error" role="alert">
               {error}
             </span>
           )}
         </span>
-        <MathPalette anchorRef={boxRef} onInsert={insertTemplate} deps={`${field.tokens.length}|${value}|${error}`} />
         </>
       ) : (
         <>

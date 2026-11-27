@@ -424,7 +424,7 @@ export const ImageDeleteGuard = Extension.create({
  * 사진 선택 · 커서 시각 보정 (편집 화면 전용 — 저장 HTML과 무관한 데코레이션)
  * 1) 드래그(범위) 선택에 들어온 사진마다 .is-selected-range → 파란 반투명 하이라이트가 하나씩 차례로 켜지고 해제 시 바로 꺼짐
  *    (ProseMirror가 브라우저 selectionchange를 받아 선택을 갱신할 때마다 다시 계산 → 드래그 중에도 실시간)
- * 2) 커서가 사진 바로 오른쪽/왼쪽이면 사진 높이만큼 큰 커서(Word처럼) — 글자 크기만 한 기본 커서는 그 줄에서 숨김
+ * 2) 사진 위를 지나가는 드래그도 범위 선택으로 (ImageDragSelect 참고)
  */
 export const ImageSelectionVisuals = Extension.create({
   name: 'imageSelectionVisuals',
@@ -447,22 +447,118 @@ export const ImageSelectionVisuals = Extension.create({
                 })
               }
             } else if (selection instanceof TextSelection && selection.empty && selection.$from.parent.isTextblock) {
+              // 사진 바로 옆 커서: 크롬은 기본 커서를 옆 사진 높이만큼 길게 그림 → 그 줄만 기본 커서를 숨기고 글자 높이 커서를 기준선에
               const $p = selection.$from
               const before = $p.nodeBefore
               const after = $p.nodeAfter
-              const para = $p.before()
-              let hit = false
-              if (isImage(before)) {
-                decos.push(Decoration.node($p.pos - before.nodeSize, $p.pos, { class: 'img-caret-after' }))
-                hit = true
-              } else if (isImage(after) && !(before?.isText)) {
-                decos.push(Decoration.node($p.pos, $p.pos + after.nodeSize, { class: 'img-caret-before' }))
-                hit = true
+              let cls = null
+              if (isImage(before)) cls = ['img-caret-after', $p.pos - before.nodeSize, $p.pos]
+              else if (isImage(after) && !before?.isText) cls = ['img-caret-before', $p.pos, $p.pos + after.nodeSize]
+              if (cls) {
+                decos.push(Decoration.node(cls[1], cls[2], { class: cls[0] }))
+                const para = $p.before()
+                decos.push(Decoration.node(para, para + $p.parent.nodeSize, { class: 'has-img-caret' }))
               }
-              if (hit) decos.push(Decoration.node(para, para + $p.parent.nodeSize, { class: 'has-img-caret' }))
             }
             return decos.length ? DecorationSet.create(doc, decos) : null
           },
+        },
+      }),
+    ]
+  },
+})
+
+/**
+ * 사진을 가로지르는 마우스 드래그 = 글자처럼 범위 선택 (Word 방식)
+ * - 문제: 사진(contenteditable=false 원자 노드) 위로 드래그가 들어가면 브라우저가 선택 끝점을 둘 곳이 없어
+ *   ① 사진 한 장만 덮이면 '노드 선택'(클릭 선택 · 핸들)으로 바뀌거나 ② 사진 위에서는 선택이 늘어나지 않음
+ * - 해결: 드래그 중 포인터가 사진 위에 있으면 그 사진 전체가 들어가도록 선택 끝을 사진 바깥쪽 경계로 지정,
+ *   노드 선택으로 바뀌는 것도 범위(TextSelection)로 되돌림 → 파란 범위 하이라이트(.is-selected-range) · 복사 · 삭제 · 정렬 그대로
+ * - 선택되지 않은 사진 위에서 누르고 끌면 고스트 이미지 끌기 대신 범위 선택 / 그냥 클릭 = 사진 선택(핸들)
+ *   이미 선택된(핸들이 보이는) 사진을 끌면 기존처럼 사진 옮기기
+ */
+export const ImageDragSelect = Extension.create({
+  name: 'imageDragSelect',
+  addProseMirrorPlugins() {
+    let drag = null // { anchor, x, y, moved, onImg, imgPos }
+    const headFor = (state, from, to) => (drag.anchor <= from ? to : from)
+    const setRange = (view, head) => {
+      const { state } = view
+      const max = state.doc.content.size
+      const a = Math.min(Math.max(0, drag.anchor), max)
+      const h = Math.min(Math.max(0, head), max)
+      const cur = state.selection
+      if (!(cur instanceof NodeSelection) && cur.anchor === a && cur.head === h) return
+      try {
+        view.dispatch(state.tr.setSelection(TextSelection.between(state.doc.resolve(a), state.doc.resolve(h))))
+      } catch {
+        /* 문서 경계 밖 등: 브라우저 기본 선택에 맡김 */
+      }
+    }
+    return [
+      new Plugin({
+        key: new PluginKey('imageDragSelect'),
+        props: {
+          handleDOMEvents: {
+            mousedown(view, e) {
+              if (e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey || e.detail > 1 || !view.editable) return false
+              const hit = view.posAtCoords({ left: e.clientX, top: e.clientY })
+              if (!hit) return false
+              const { state } = view
+              const node = hit.inside >= 0 ? state.doc.nodeAt(hit.inside) : null
+              const imgEl = e.target?.closest?.('.img-node')
+              const onImg = isImage(node) && !!imgEl
+              const sel = state.selection
+              // 이미 선택된 사진을 누름 → 기존 동작(끌어서 옮기기 · 핸들)
+              if (onImg && sel instanceof NodeSelection && sel.from === hit.inside) return false
+              let anchor = hit.pos
+              if (onImg) {
+                const r = imgEl.getBoundingClientRect()
+                anchor = e.clientX < r.left + r.width / 2 ? hit.inside : hit.inside + node.nodeSize
+              }
+              drag = { anchor, x: e.clientX, y: e.clientY, moved: false, onImg, imgPos: onImg ? hit.inside : null }
+              const move = (ev) => {
+                if (!drag || !(ev.buttons & 1)) return
+                if (!drag.moved && Math.hypot(ev.clientX - drag.x, ev.clientY - drag.y) < 4) return
+                drag.moved = true
+                const h = view.posAtCoords({ left: ev.clientX, top: ev.clientY })
+                if (!h) return
+                const n = h.inside >= 0 ? view.state.doc.nodeAt(h.inside) : null
+                if (isImage(n)) setRange(view, headFor(view.state, h.inside, h.inside + n.nodeSize))
+                else if (drag.onImg) setRange(view, h.pos) // 사진에서 시작한 드래그는 끝까지 직접 계산
+                // 글자에서 시작해 글자 위를 지나는 동안은 브라우저 기본 선택 그대로
+              }
+              const up = () => {
+                window.removeEventListener('mousemove', move)
+                window.removeEventListener('mouseup', up, true)
+                const d = drag
+                drag = null
+                if (d?.onImg && !d.moved) {
+                  const { state: s } = view
+                  if (isImage(s.doc.nodeAt(d.imgPos))) view.dispatch(s.tr.setSelection(NodeSelection.create(s.doc, d.imgPos)))
+                }
+              }
+              window.addEventListener('mousemove', move)
+              window.addEventListener('mouseup', up, true)
+              if (onImg) {
+                // 고스트 이미지 끌기 · 브라우저 기본 선택 시작을 막고 직접 처리
+                e.preventDefault()
+                view.focus()
+                return true
+              }
+              return false
+            },
+          },
+        },
+        // 드래그 중 브라우저 선택이 사진 한 장을 딱 덮어 '노드 선택'이 되면 범위 선택으로 유지
+        appendTransaction(_trs, _old, state) {
+          const sel = state.selection
+          if (!drag?.moved || !(sel instanceof NodeSelection) || !isImage(sel.node)) return null
+          try {
+            return state.tr.setSelection(TextSelection.between(state.doc.resolve(drag.anchor), state.doc.resolve(headFor(state, sel.from, sel.to))))
+          } catch {
+            return null
+          }
         },
       }),
     ]
@@ -756,6 +852,7 @@ export function buildExtensions() {
     Figure,
     ImageDeleteGuard,
     ImageSelectionVisuals,
+    ImageDragSelect,
     TableKit.configure({ table: { resizable: false }, tableCell: false, tableHeader: false }),
     Cell,
     Header,

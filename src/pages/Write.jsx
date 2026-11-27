@@ -4,6 +4,8 @@ import { EditorContent, useEditor } from '@tiptap/react'
 import { NodeSelection, Selection } from '@tiptap/pm/state'
 import { buildExtensions, upgradeLegacyFigures } from '../editor/extensions.js'
 import Toolbar from '../editor/Toolbar.jsx'
+import MathRibbon from '../editor/MathRibbon.jsx'
+import { useMathRibbon } from '../editor/mathRibbonStore.js'
 import { applyFormat, describeFormat, readFormat } from '../editor/formatPainter.js'
 import TableToolbar from '../editor/TableToolbar.jsx'
 import DividerPopover from '../editor/DividerPopover.jsx'
@@ -139,6 +141,8 @@ function EditorPage({ initial, categories }) {
       }
     }
   }, [])
+
+  const mathRibbon = useMathRibbon() // 수식 상자가 열려 있으면 그 상자의 조작 API
 
   const editor = useEditor({
     extensions,
@@ -551,7 +555,12 @@ function EditorPage({ initial, categories }) {
           </button>
         </div>
         <div className="toolbar-wrap">
-          <Toolbar editor={editor} onMath={openMath} onLink={openLink} onImage={() => fileRef.current?.click()} />
+          {/* 수식 입력 모드: 툴바가 PowerPoint [수식] 리본으로 바뀌고, 상자를 닫으면 원래 툴바로 */}
+          {mathRibbon ? (
+            <MathRibbon api={mathRibbon} />
+          ) : (
+            <Toolbar editor={editor} onMath={openMath} onLink={openLink} onImage={() => fileRef.current?.click()} />
+          )}
           {fmtToast && (
             <div key={fmtToast.id} className="fmt-toast" role="status" aria-live="polite">
               <Icon name="check" size={14} strokeWidth={2.6} /> {fmtToast.text}
