@@ -7,6 +7,7 @@ import { NodeViewWrapper } from '@tiptap/react'
 import { NodeSelection, TextSelection } from '@tiptap/pm/state'
 import katex from 'katex'
 import { renderLatex } from '../lib/math.js'
+import MathPalette, { applyTemplate } from './MathPalette.jsx'
 
 export const MATH_PLACEHOLDER = '여기에 수식을 입력하세요.'
 
@@ -29,6 +30,29 @@ export default function MathView({ node, editor, getPos, selected }) {
   const [error, setError] = useState(null)
   const inputRef = useRef(null)
   const done = useRef(false) // 한 번의 편집에서 확정이 두 번(Enter 후 blur) 일어나지 않게
+  const boxRef = useRef(null)
+  const pendingSel = useRef(null) // 팔레트로 삽입한 뒤 옮길 입력 커서/선택 범위
+
+  // 퀵 팔레트: 현재 커서(선택) 위치에 템플릿 삽입 → 첫 입력 자리로 커서 이동, 포커스 유지
+  const insertTemplate = (ins) => {
+    const el = inputRef.current
+    if (!el) return
+    const s = el.selectionStart ?? el.value.length
+    const e = el.selectionEnd ?? s
+    const r = applyTemplate(el.value, s, e, ins)
+    done.current = false
+    setValue(r.value)
+    setError(null)
+    pendingSel.current = [r.selStart, r.selEnd]
+  }
+  useLayoutEffect(() => {
+    const sel = pendingSel.current
+    const el = inputRef.current
+    if (!sel || !el) return
+    pendingSel.current = null
+    el.focus({ preventScroll: true })
+    el.setSelectionRange(sel[0], sel[1])
+  }, [value])
 
   // 편집 시작: 원본 LaTeX를 불러오고 상자에 바로 포커스
   useLayoutEffect(() => {
@@ -156,7 +180,9 @@ export default function MathView({ node, editor, getPos, selected }) {
       title={editing ? undefined : '클릭하거나 ←/→ 키로 들어가 수식 수정'}
     >
       {editing ? (
+        <>
         <span
+          ref={boxRef}
           className={`math-box ${error ? 'has-error' : ''}`}
           title="Enter 확정 · Esc 닫기 · Alt+3 인라인/블록 전환"
           onMouseDown={(e) => {
@@ -196,6 +222,8 @@ export default function MathView({ node, editor, getPos, selected }) {
             </span>
           )}
         </span>
+        <MathPalette anchorRef={boxRef} onInsert={insertTemplate} deps={`${value}|${error}`} />
+        </>
       ) : (
         <span className="math-render" dangerouslySetInnerHTML={{ __html: html }} />
       )}

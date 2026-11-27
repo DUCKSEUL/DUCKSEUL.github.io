@@ -1404,3 +1404,162 @@ li.paper,
   padding-left: 0;
   text-align: left;
 }
+
+/* ═══ v15: 수식 입력 상자 아래 퀵 팔레트 (편집 화면 전용) ═══ */
+:root {
+  --math-pal-bg: #ffffff;
+  --math-pal-line: #dbe4f0;
+  --math-pal-btn: #f8fafc;
+  --math-pal-btn-hover: #eff6ff;
+  --math-pal-text: #475569;
+  --math-pal-icon: #0f172a;
+}
+:root[data-theme='dark'] {
+  --math-pal-bg: #111827;
+  --math-pal-line: #334155;
+  --math-pal-btn: #1e293b;
+  --math-pal-btn-hover: #1e3a5f;
+  --math-pal-text: #94a3b8;
+  --math-pal-icon: #e2e8f0;
+}
+.math-pal {
+  position: fixed;
+  z-index: 1001;
+  width: 348px;
+  max-width: calc(100vw - 24px);
+  padding: 6px;
+  border: 1px solid var(--math-pal-line);
+  border-radius: 12px;
+  background: var(--math-pal-bg);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.14), 0 2px 6px rgba(15, 23, 42, 0.06);
+  color: var(--math-pal-text);
+  font-size: 12px;
+  user-select: none;
+  animation: mathPalIn 0.14s ease-out;
+}
+.math-pal.is-collapsed {
+  width: auto;
+}
+@keyframes mathPalIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.math-pal-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.math-pal-title {
+  padding: 0 6px;
+  font-weight: 600;
+}
+.math-pal-tabs {
+  display: flex;
+  flex: 1;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--math-pal-btn);
+}
+.math-pal-tab {
+  flex: 1;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--math-pal-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.math-pal-tab:hover {
+  color: var(--math-border);
+}
+.math-pal-tab.is-on {
+  background: var(--math-pal-bg);
+  color: var(--math-border);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+.math-pal-fold {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--math-pal-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.math-pal-fold:hover {
+  background: var(--math-pal-btn-hover);
+  color: var(--math-border);
+}
+.math-pal-body {
+  display: grid;
+  gap: 6px;
+  max-height: min(340px, 60vh);
+  margin-top: 6px;
+  overflow-y: auto;
+}
+.math-pal-gtitle {
+  margin: 2px 2px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+.math-pal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(34px, 1fr));
+  gap: 4px;
+}
+.math-pal-body.is-matrix .math-pal-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+.math-pal-body.is-struct .math-pal-grid {
+  grid-template-columns: repeat(4, 1fr);
+}
+.math-pal-btn {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  height: 34px;
+  padding: 0 2px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: var(--math-pal-btn);
+  color: var(--math-pal-icon);
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+.math-pal-body.is-matrix .math-pal-btn {
+  height: 58px;
+}
+.math-pal-body.is-struct .math-pal-btn {
+  height: 56px;
+}
+.math-pal-btn:hover {
+  border-color: var(--math-border);
+  background: var(--math-pal-btn-hover);
+}
+.math-pal-btn:active {
+  transform: scale(0.96);
+}
+.math-pal-icon {
+  max-width: 100%;
+  font-size: 13px;
+  line-height: 1;
+  pointer-events: none;
+}
+.math-pal-body.is-matrix .math-pal-icon {
+  font-size: 10.5px;
+}
+.math-pal-body.is-struct .math-pal-icon {
+  font-size: 10.5px;
+}
+.math-pal-icon .katex {
+  font-size: 1.15em;
+}
